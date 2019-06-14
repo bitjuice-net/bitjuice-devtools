@@ -6,19 +6,17 @@ namespace DevTools.Apps
 {
     public class AppRepository
     {
+        public string Path { get; set; }
         public Dictionary<string, AppDeclaration> Apps { get; set; }
 
         public static AppRepository FromFile(string fileName)
         {
-            return new AppRepository
-            {
-                Apps = JToken.Parse(File.ReadAllText(fileName)).ToObject<Dictionary<string, AppDeclaration>>()
-            };
+            return JToken.Parse(File.ReadAllText(fileName)).ToObject<AppRepository>();
         }
 
         public void SaveAs(string fileName)
         {
-            File.WriteAllText(JToken.FromObject(Apps).ToString(), fileName);
+            File.WriteAllText(fileName, JToken.FromObject(this).ToString());
         }
     }
 }

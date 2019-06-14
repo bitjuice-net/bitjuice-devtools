@@ -5,7 +5,7 @@ namespace DevTools.Apps
     public class AppOptions
     {
         public bool Save { get; set; }
-        public bool Path { get; set; }
+        public bool Update { get; set; }
         public bool List { get; set; }
         public List<AppOptionVariant> Variants { get; set; }
 
