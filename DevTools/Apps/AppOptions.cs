@@ -19,10 +19,4 @@ namespace DevTools.Apps
             Variants.Add(new AppOptionVariant() {AppName = appName, VariantName = variantName});
         }
     }
-
-    public class AppOptionVariant
-    {
-        public string AppName { get; set; }
-        public string VariantName { get; set; }
-    }
 }
