@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using DevTools.Apps;
 using Mono.Options;
 
@@ -6,40 +7,71 @@ namespace DevTools
 {
     internal class Program
     {
+        private const string ConfigFile = "config.json";
+
         private static void Main(string[] args)
         {
-            var appOptions = new AppOptions();
+            var options = GetOptions(args);
+            if (options != null)
+                Execute(options);
+        }
 
-            var p = new OptionSet
+        private static void Execute(AppOptions options)
+        {
+            var repository = AppRepository.FromFile(ConfigFile);
+            var manager = new AppManager(repository);
+
+            foreach (var variant in options.Variants)
+                manager.SelectVariant(variant.AppName, variant.VariantName);
+
+            if (options.List)
+                manager.ListApps("");
+
+            if (options.Path)
+                manager.PrintPath();
+
+            if (options.Save)
+                repository.SaveAs(ConfigFile);
+        }
+
+        private static AppOptions GetOptions(IEnumerable<string> args)
+        {
+            var result = new AppOptions();
+            var help = false;
+            var optionSet = new OptionSet
             {
-                {"p|path", "get environment path", i => appOptions.Path = true},
-                {"c|choice=", "choice app variant.\n", (i, j) =>
-                {
-                    appOptions.Choice = true;
-                    appOptions.AppName = i;
-                    appOptions.VariantName = j;
-                }},
-                {"s|save", "app variant.\n", i => appOptions.Save = true},
-                {"h|help", "show this message and exit", ShowHelp}
+                {"p|path", "Print generated PATH", i => result.Path = true},
+                {"v|variant=", "Set application variant.\n", (app, variant) => result.AddVariant(app, variant)},
+                {"l|list", "List available applications.\n", i => result.Save = true},
+                {"s|save", "Save variant.\n", i => result.Save = true},
+                {"h|help", "Show this message and exit", i => help = true}
             };
 
             try
             {
-                var extra = p.Parse(args);
+                optionSet.Parse(args);
+
+                if (!help)
+                    return result;
+
+                ShowHelp(optionSet);
+                return null;
+
             }
             catch (OptionException e)
             {
-                Console.Write("greet: ");
                 Console.WriteLine(e.Message);
-                Console.WriteLine("Try `greet --help' for more information.");
+                Console.WriteLine("Try `devtools --help' for more information.");
+                return null;
             }
-
-            var config = AppCollection.FromFile("config.json");
-            var appManager = new AppManager("config.json");
         }
 
-        private static void ShowHelp(string s)
+        private static void ShowHelp(OptionSet optionSet)
         {
+            Console.WriteLine("Usage: devtools [OPTIONS]");
+            Console.WriteLine();
+            Console.WriteLine("Options:");
+            optionSet.WriteOptionDescriptions(Console.Out);
         }
     }
 }

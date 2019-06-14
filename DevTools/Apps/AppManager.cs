@@ -7,21 +7,17 @@ namespace DevTools.Apps
 {
     public class AppManager
     {
-        private readonly string fileName;
-        private readonly AppCollection apps;
+        private readonly AppRepository repository;
 
-        public AppManager(string fileName)
+        public AppManager(AppRepository repository)
         {
-            if (!File.Exists(fileName))
-                throw new FileNotFoundException("Configuration file is missing.", Path.GetFullPath(fileName));
-            this.fileName = fileName;
-            apps = AppCollection.FromFile(fileName);
+            this.repository = repository;
         }
 
-        public void GetPath()
+        public void PrintPath()
         {
             var paths = new List<string>();
-            foreach (var app in apps.Values)
+            foreach (var app in repository.Apps.Values)
             {
                 if (!app.Variants.TryGetValue(app.Selected, out var variant))
                     variant = app.Variants.Values.FirstOrDefault();
@@ -29,28 +25,27 @@ namespace DevTools.Apps
                     continue;
                 foreach (var path in variant.Paths)
                 {
-                    paths.Add(Path.GetFullPath(Path.Combine(app.BasePath, path)));
+                    paths.Add(Path.GetFullPath(Path.Combine(app.Path ?? string.Empty, path)));
                 }
             }
             Console.WriteLine(string.Join(";", paths));
         }
 
-        public void SetDefault(string appName, string variantName)
+        public void SelectVariant(string appName, string variantName)
         {
-            if(!apps.TryGetValue(appName, out var app))
-                return;
+            if(!repository.Apps.TryGetValue(appName, out var app))
+                throw new Exception($"App not found: {appName}");
             if(!app.Variants.TryGetValue(variantName, out var variant))
-                return;
+                throw new Exception($"Variant not found: {variantName}");
             app.Selected = variantName;
         }
 
-        public void List(string appName)
+        public void ListApps(string appName)
         {
-            foreach (var app in apps)
+            foreach (var app in repository.Apps)
             {
-                Console.WriteLine($"{app.Key}: {app.Value.Description}");
-                foreach (var variant in app.Value.Variants)
-                    Console.WriteLine($"\t{variant.Key}: {variant.Value.Description}");
+                var variants = string.Join(", ", app.Value.Variants.Keys);
+                Console.WriteLine($"{app.Key.PadRight(10)}: {app.Value.Description.PadRight(20)} ({variants})");
             }
         }
     }
