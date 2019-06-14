@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DevTools": {
+      "commandName": "Project",
+      "commandLineArgs": "-e -switch python 2.4.6"
+    }
+  }
+}
