@@ -29,8 +29,15 @@ namespace DevTools.Apps
 
             foreach (var app in Repository.Apps.Values)
             {
+                if(app.Disabled)
+                    continue;
+                
+                if(app.Variants == null)
+                    continue;
+
                 if (!app.Variants.TryGetValue(app.Selected, out var variant))
                     variant = app.Variants.Values.FirstOrDefault();
+
                 if(variant == null)
                     continue;
 
@@ -61,16 +68,25 @@ namespace DevTools.Apps
 
         public void ListApps(string appName)
         {
-            var table = new ConsoleTable("Name", "Description", "Variant", "Available");
+            var table = new ConsoleTable("Name", "Description", "Disabled", "Variant", "Available");
             foreach (var (key, value) in Repository.Apps)
             {
                 var versions = value.Variants != null ? string.Join(", ", value.Variants.Keys) : "<empty>";
-                table.AddRow(key, value.Description, value.Selected ?? "<not set>", versions);
+                table.AddRow(key, value.Description, value.Disabled, value.Selected ?? "<not set>", versions);
             }
 
             Console.WriteLine("List of applications:");
             Console.WriteLine();
             table.Write(Format.MarkDown);
+        }
+        
+        public void SetDisabled(string appName, bool disabled)
+        {
+            if (!Repository.Apps.TryGetValue(appName, out var app))
+                throw new Exception($"App not found: {appName}");
+            app.Disabled = disabled;
+
+            Save();
         }
 
         public void AddApp(string appName, string description, string path)

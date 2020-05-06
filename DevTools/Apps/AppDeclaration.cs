@@ -7,6 +7,7 @@ namespace DevTools.Apps
         public string Description { get; set; }
         public string Path { get; set; }
         public string Selected { get; set; }
+        public bool Disabled { get; set; }
         public Dictionary<string, AppVariant> Variants { get; set; }
     }
 }

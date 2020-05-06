@@ -15,19 +15,13 @@ namespace DevTools
             var manager = new AppManager(RepoFile, PathFile);
 
             var rootCommand = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
-            rootCommand.AddCommand(BuildListCommand(manager));
             rootCommand.AddCommand(BuildUpdateCommand(manager));
+            rootCommand.AddCommand(BuildListCommand(manager));
             rootCommand.AddCommand(BuildSelectCommand(manager));
+            rootCommand.AddCommand(BuildDisableCommand(manager));
+            rootCommand.AddCommand(BuildEnableCommand(manager));
             rootCommand.AddCommand(BuildNewCommand(manager));
             rootCommand.Invoke(args);
-        }
-
-        private static Command BuildListCommand(AppManager manager)
-        {
-            return new Command("list", "List available applications.")
-            {
-                Handler = CommandHandler.Create(manager.ListApps)
-            };
         }
 
         private static Command BuildUpdateCommand(AppManager manager)
@@ -35,6 +29,14 @@ namespace DevTools
             return new Command("update", "Regenerates path.txt.")
             {
                 Handler = CommandHandler.Create(manager.UpdatePath)
+            };
+        }
+
+        private static Command BuildListCommand(AppManager manager)
+        {
+            return new Command("list", "List available applications.")
+            {
+                Handler = CommandHandler.Create(manager.ListApps)
             };
         }
 
@@ -53,6 +55,30 @@ namespace DevTools
             cmd.AddArgument(new Argument<string>("app"));
             cmd.AddArgument(new Argument<string>("variant"));
             cmd.AddOption(new Option<bool>(new []{"-s", "--save"}, "Save selected variant."));
+
+            return cmd;
+        }
+
+        private static Command BuildDisableCommand(AppManager manager)
+        {
+            var cmd = new Command("disable", "Enables application")
+            {
+                Handler = CommandHandler.Create((string app) => manager.SetDisabled(app, true))
+            };
+
+            cmd.AddArgument(new Argument<string>("app"));
+
+            return cmd;
+        }
+
+        private static Command BuildEnableCommand(AppManager manager)
+        {
+            var cmd = new Command("enable", "Enables application")
+            {
+                Handler = CommandHandler.Create((string app) => manager.SetDisabled(app, false))
+            };
+
+            cmd.AddArgument(new Argument<string>("app"));
 
             return cmd;
         }
