@@ -62,8 +62,12 @@ namespace DevTools.Apps
         public void ListApps(string appName)
         {
             var table = new ConsoleTable("Name", "Description", "Variant", "Available");
-            foreach (var (key, value) in Repository.Apps)   
-                table.AddRow(key, value.Description, value.Selected, string.Join(", ", value.Variants.Keys));
+            foreach (var (key, value) in Repository.Apps)
+            {
+                var versions = value.Variants != null ? string.Join(", ", value.Variants.Keys) : "<empty>";
+                table.AddRow(key, value.Description, value.Selected ?? "<not set>", versions);
+            }
+
             Console.WriteLine("List of applications:");
             Console.WriteLine();
             table.Write(Format.MarkDown);
