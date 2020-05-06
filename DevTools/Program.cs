@@ -1,82 +1,104 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using DevTools.Apps;
-using Mono.Options;
+using System.CommandLine;
+using System.CommandLine.Invocation;
 
 namespace DevTools
 {
     internal class Program
     {
-        private const string ConfigFile = "config.json";
-        private const string PathFile = "path.txt";
+        private static readonly string RepoFile = Path.Combine(Common.AssemblyDirectory, "config.json");
+        private static readonly string PathFile = Path.Combine(Common.AssemblyDirectory, "path.txt");
 
         private static void Main(string[] args)
         {
-            var configFile = Path.Combine(Common.AssemblyDirectory, ConfigFile);
-            var pathFile = Path.Combine(Common.AssemblyDirectory, PathFile);
+            var manager = new AppManager(RepoFile, PathFile);
 
-            var options = GetOptions(args);
-            if (options != null)
-                Execute(options, configFile, pathFile);
+            var rootCommand = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
+            rootCommand.AddCommand(BuildListCommand(manager));
+            rootCommand.AddCommand(BuildUpdateCommand(manager));
+            rootCommand.AddCommand(BuildSelectCommand(manager));
+            rootCommand.AddCommand(BuildNewCommand(manager));
+            rootCommand.Invoke(args);
         }
 
-        private static void Execute(AppOptions options, string configFile, string pathFile)
+        private static Command BuildListCommand(AppManager manager)
         {
-            var repository = AppRepository.FromFile(configFile);
-            var manager = new AppManager(repository);
-
-            foreach (var variant in options.Variants)
-                manager.SelectVariant(variant.AppName, variant.VariantName);
-
-            if (options.List)
-                manager.ListApps("");
-
-            if (options.Save)
-                repository.SaveAs(configFile);
-
-            if (options.Update)
-                manager.UpdatePath(pathFile);
-        }
-
-        private static AppOptions GetOptions(IEnumerable<string> args)
-        {
-            var result = new AppOptions();
-            var help = false;
-            var optionSet = new OptionSet
+            return new Command("list", "List available applications.")
             {
-                {"u|update", "Update PATH file", i => result.Update = true},
-                {"v|variant=", "Set application variant.\n", (app, variant) => result.AddVariant(app, variant)},
-                {"l|list", "List available applications.\n", i => result.List = true},
-                {"s|save", "Save variant.\n", i => result.Save = true},
-                {"h|help", "Show this message and exit", i => help = true}
+                Handler = CommandHandler.Create(manager.ListApps)
+            };
+        }
+
+        private static Command BuildUpdateCommand(AppManager manager)
+        {
+            return new Command("update", "Regenerates path.txt.")
+            {
+                Handler = CommandHandler.Create(manager.UpdatePath)
+            };
+        }
+
+        private static Command BuildSelectCommand(AppManager manager)
+        {
+            var cmd =  new Command("select", "Selects app variant to use.")
+            {
+                Handler = CommandHandler.Create((string app, string variant, bool save) =>
+                {
+                    manager.SelectVariant(app, variant);
+                    if(save)
+                        manager.Repository.SaveAs(RepoFile); //todo
+                })
+            };
+            
+            cmd.AddArgument(new Argument<string>("app"));
+            cmd.AddArgument(new Argument<string>("variant"));
+            cmd.AddOption(new Option<bool>(new []{"-s", "--save"}, "Save selected variant."));
+
+            return cmd;
+        }
+
+        private static Command BuildNewCommand(AppManager manager)
+        {
+            var cmd = new Command("new", "Creates new app or variant.");
+
+            cmd.AddCommand(BuildNewAppCommand(manager));
+            cmd.AddCommand(BuildNewVariantCommand(manager));
+
+            return cmd;
+        }
+
+        private static Command BuildNewAppCommand(AppManager manager)
+        {
+            var cmd = new Command("app", "Creates new app.")
+            {
+                Handler = CommandHandler.Create((string app, string description, string path) =>
+                {
+                    manager.AddApp(app, description, path);
+                })
+            };
+            
+            cmd.AddArgument(new Argument<string>("app"));
+            cmd.AddArgument(new Argument<string>("description"));
+            cmd.AddArgument(new Argument<string>("path"));
+
+            return cmd;
+        }
+
+        private static Command BuildNewVariantCommand(AppManager manager)
+        {
+            var cmd = new Command("variant", "Creates new variant.")
+            {
+                Handler = CommandHandler.Create((string app, string variant, string path) =>
+                {
+                    manager.AddVariant(app, variant, path);
+                })
             };
 
-            try
-            {
-                optionSet.Parse(args);
+            cmd.AddArgument(new Argument<string>("app"));
+            cmd.AddArgument(new Argument<string>("variant"));
+            cmd.AddArgument(new Argument<string>("path"));
 
-                if (!help)
-                    return result;
-
-                ShowHelp(optionSet);
-                return null;
-
-            }
-            catch (OptionException e)
-            {
-                Console.WriteLine(e.Message);
-                Console.WriteLine("Try `dt --help' for more information.");
-                return null;
-            }
-        }
-
-        private static void ShowHelp(OptionSet optionSet)
-        {
-            Console.WriteLine("Usage: dt [OPTIONS]");
-            Console.WriteLine();
-            Console.WriteLine("Options:");
-            optionSet.WriteOptionDescriptions(Console.Out);
+            return cmd;
         }
     }
 }
