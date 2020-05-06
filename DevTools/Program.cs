@@ -13,7 +13,7 @@ namespace DevTools
         private static void Main(string[] args)
         {
             var manager = new AppManager(RepoFile, PathFile);
-
+            
             var rootCommand = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
             rootCommand.AddCommand(BuildUpdateCommand(manager));
             rootCommand.AddCommand(BuildListCommand(manager));
@@ -44,17 +44,14 @@ namespace DevTools
         {
             var cmd =  new Command("select", "Selects app variant to use.")
             {
-                Handler = CommandHandler.Create((string app, string variant, bool save) =>
+                Handler = CommandHandler.Create((string app, string variant) =>
                 {
                     manager.SelectVariant(app, variant);
-                    if(save)
-                        manager.Repository.SaveAs(RepoFile); //todo
                 })
             };
             
             cmd.AddArgument(new Argument<string>("app"));
             cmd.AddArgument(new Argument<string>("variant"));
-            cmd.AddOption(new Option<bool>(new []{"-s", "--save"}, "Save selected variant."));
 
             return cmd;
         }

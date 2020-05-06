@@ -8,31 +8,34 @@ namespace DevTools.Apps
 {
     public class AppManager
     {
-        public string RepoFile { get; }
-        public string PathFile { get; }
-        public AppRepository Repository { get; }
+        private const string EmptyConst = "<empty>";
+        private const string NotSetConst = "<not set>";
+
+        private readonly string repoFile;
+        private readonly string pathFile;
+        private readonly AppRepository repository;
 
         public AppManager(string repoFile, string pathFile)
         {
-            RepoFile = repoFile;
-            PathFile = pathFile;
-            Repository = AppRepository.FromFile(repoFile);
+            this.repoFile = repoFile;
+            this.pathFile = pathFile;
+            repository = AppRepository.FromFile(repoFile);
         }
 
         public void UpdatePath()
         {
             var paths = new List<string>();
 
-            var basePath = Path.IsPathRooted(Repository.Path) 
-                ? Repository.Path 
-                : Path.Combine(Common.AssemblyDirectory, Repository.Path);
+            var basePath = Path.IsPathRooted(repository.Path) 
+                ? repository.Path 
+                : Path.Combine(Common.AssemblyDirectory, repository.Path);
 
-            foreach (var app in Repository.Apps.Values)
+            foreach (var app in repository.Apps.Values)
             {
                 if(app.Disabled)
                     continue;
                 
-                if(app.Variants == null)
+                if(app.Variants == null || app.Selected == null)
                     continue;
 
                 if (!app.Variants.TryGetValue(app.Selected, out var variant))
@@ -48,17 +51,19 @@ namespace DevTools.Apps
             }
 
             var path = string.Join(";", paths);
-            File.WriteAllText(PathFile, path);
+            File.WriteAllText(pathFile, path);
         }
 
         public void SelectVariant(string appName, string variantName)
         {
-            if(!Repository.Apps.TryGetValue(appName, out var app))
+            if(!repository.Apps.TryGetValue(appName, out var app))
                 throw new Exception($"App not found: {appName}");
             if(!app.Variants.TryGetValue(variantName, out var variant))
                 throw new Exception($"Variant not found: {variantName}");
-            Console.WriteLine($"Switching {app.Description} from {app.Selected} to {variantName}");
+            Console.WriteLine($"Switching {app.Description} from {app.Selected ?? NotSetConst} to {variantName}");
             app.Selected = variantName;
+
+            Save();
         }
 
         public void ListApps()
@@ -69,10 +74,10 @@ namespace DevTools.Apps
         public void ListApps(string appName)
         {
             var table = new ConsoleTable("Name", "Description", "Disabled", "Variant", "Available");
-            foreach (var (key, value) in Repository.Apps)
+            foreach (var (key, value) in repository.Apps)
             {
-                var versions = value.Variants != null ? string.Join(", ", value.Variants.Keys) : "<empty>";
-                table.AddRow(key, value.Description, value.Disabled, value.Selected ?? "<not set>", versions);
+                var versions = value.Variants != null ? string.Join(", ", value.Variants.Keys) : EmptyConst;
+                table.AddRow(key, value.Description, value.Disabled, value.Selected ?? NotSetConst, versions);
             }
 
             Console.WriteLine("List of applications:");
@@ -82,7 +87,7 @@ namespace DevTools.Apps
         
         public void SetDisabled(string appName, bool disabled)
         {
-            if (!Repository.Apps.TryGetValue(appName, out var app))
+            if (!repository.Apps.TryGetValue(appName, out var app))
                 throw new Exception($"App not found: {appName}");
             app.Disabled = disabled;
 
@@ -91,10 +96,10 @@ namespace DevTools.Apps
 
         public void AddApp(string appName, string description, string path)
         {
-            if (Repository.Apps.TryGetValue(appName, out var app))
+            if (repository.Apps.TryGetValue(appName, out var app))
                 throw new Exception($"App already exists: {appName}");
 
-            Repository.Apps.Add(appName, new AppDeclaration()
+            repository.Apps.Add(appName, new AppDeclaration()
             {
                 Description = description,
                 Path = path
@@ -105,7 +110,7 @@ namespace DevTools.Apps
 
         public void AddVariant(string appName, string variantName, string path)
         {
-            if (!Repository.Apps.TryGetValue(appName, out var app))
+            if (!repository.Apps.TryGetValue(appName, out var app))
                 throw new Exception($"App not found: {appName}");
 
             app.Variants ??= new Dictionary<string, AppVariant>();
@@ -125,7 +130,7 @@ namespace DevTools.Apps
 
         public void Save()
         {
-            Repository.SaveAs(RepoFile);
+            repository.SaveAs(repoFile);
         }
     }
 }
