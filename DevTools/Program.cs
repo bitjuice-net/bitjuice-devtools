@@ -32,18 +32,26 @@ namespace DevTools
 
         private static Command BuildPathCommand(AppManager manager)
         {
-            return new Command("path", "Get PATH string.")
+            var cmd = new Command("path", "Get PATH string.")
             {
                 Handler = CommandHandler.Create(manager.GetPath)
             };
+            
+            cmd.AddAlias("p");
+
+            return cmd;
         }
 
         private static Command BuildListCommand(AppManager manager)
         {
-            return new Command("list", "List available applications.")
+            var cmd = new Command("list", "List available applications.")
             {
                 Handler = CommandHandler.Create(manager.ListApps)
             };
+
+            cmd.AddAlias("l");
+
+            return cmd;
         }
 
         private static Command BuildSelectCommand(AppManager manager)
@@ -55,7 +63,8 @@ namespace DevTools
                     manager.SelectVariant(appName, variantName);
                 })
             };
-            
+
+            cmd.AddAlias("s");
             cmd.AddArgument(new Argument<string>("app-name"));
             cmd.AddArgument(new Argument<string>("variant-name"));
 
@@ -69,6 +78,7 @@ namespace DevTools
                 Handler = CommandHandler.Create((string appName) => manager.SetDisabled(appName, true))
             };
 
+            cmd.AddAlias("d");
             cmd.AddArgument(new Argument<string>("app-name"));
 
             return cmd;
@@ -81,6 +91,7 @@ namespace DevTools
                 Handler = CommandHandler.Create((string appName) => manager.SetDisabled(appName, false))
             };
 
+            cmd.AddAlias("e");
             cmd.AddArgument(new Argument<string>("app-name"));
 
             return cmd;
@@ -90,6 +101,7 @@ namespace DevTools
         {
             var cmd = new Command("add", "Add new app or variant.");
 
+            cmd.AddAlias("a");
             cmd.AddCommand(BuildNewAppCommand(manager));
             cmd.AddCommand(BuildNewVariantCommand(manager));
 
