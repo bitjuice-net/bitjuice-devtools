@@ -66,14 +66,14 @@ namespace DevTools
             catch (OptionException e)
             {
                 Console.WriteLine(e.Message);
-                Console.WriteLine("Try `devtools --help' for more information.");
+                Console.WriteLine("Try `dt --help' for more information.");
                 return null;
             }
         }
 
         private static void ShowHelp(OptionSet optionSet)
         {
-            Console.WriteLine("Usage: devtools [OPTIONS]");
+            Console.WriteLine("Usage: dt [OPTIONS]");
             Console.WriteLine();
             Console.WriteLine("Options:");
             optionSet.WriteOptionDescriptions(Console.Out);

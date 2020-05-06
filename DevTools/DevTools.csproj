@@ -5,6 +5,7 @@
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <ApplicationIcon />
     <StartupObject />
+    <AssemblyName>dt</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,16 +22,16 @@
     <None Update="path.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Scripts\devtools-install.cmd">
+    <None Update="Scripts\dt-install.cmd">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Scripts\devtools-setup.cmd">
+    <None Update="Scripts\dt-setup.cmd">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Scripts\devtools-update.cmd">
+    <None Update="Scripts\dt-update.cmd">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Scripts\devtools-switch.cmd">
+    <None Update="Scripts\dt-switch.cmd">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
