@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <PackageReference Include="ConsoleTables" Version="2.4.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20253.1" />
   </ItemGroup>
 

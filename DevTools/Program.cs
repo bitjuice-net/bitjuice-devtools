@@ -12,7 +12,6 @@ namespace DevTools
         private static void Main(string[] args)
         {
             var manager = new AppManager(new AppRepositoryProvider(RepoFile));
-            
             var cmd = BuildCommands(manager);
             cmd.Invoke(args);
         }
