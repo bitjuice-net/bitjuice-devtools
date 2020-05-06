@@ -11,18 +11,16 @@ namespace DevTools.Apps
         private const string EmptyConst = "<empty>";
         private const string NotSetConst = "<not set>";
 
-        private readonly string repoFile;
-        private readonly string pathFile;
+        private readonly IAppRepositoryProvider provider;
         private readonly AppRepository repository;
 
-        public AppManager(string repoFile, string pathFile)
+        public AppManager(IAppRepositoryProvider provider)
         {
-            this.repoFile = repoFile;
-            this.pathFile = pathFile;
-            repository = AppRepository.FromFile(repoFile);
+            this.provider = provider;
+            repository = provider.Load();
         }
 
-        public void UpdatePath()
+        public void GetPath()
         {
             var paths = new List<string>();
 
@@ -50,30 +48,13 @@ namespace DevTools.Apps
                     paths.Add(Path.GetFullPath(Path.Combine(appPath, variantPath)));
             }
 
-            var path = string.Join(";", paths);
-            File.WriteAllText(pathFile, path);
+            Console.WriteLine(string.Join(";", paths));
         }
-
-        public void SelectVariant(string appName, string variantName)
-        {
-            if(!repository.Apps.TryGetValue(appName, out var app))
-                throw new Exception($"App not found: {appName}");
-            if(!app.Variants.TryGetValue(variantName, out var variant))
-                throw new Exception($"Variant not found: {variantName}");
-            Console.WriteLine($"Switching {app.Description} from {app.Selected ?? NotSetConst} to {variantName}");
-            app.Selected = variantName;
-
-            Save();
-        }
-
+        
         public void ListApps()
         {
-            ListApps(string.Empty);
-        }
-
-        public void ListApps(string appName)
-        {
             var table = new ConsoleTable("Name", "Description", "Disabled", "Variant", "Available");
+
             foreach (var (key, value) in repository.Apps)
             {
                 var versions = value.Variants != null ? string.Join(", ", value.Variants.Keys) : EmptyConst;
@@ -82,16 +63,33 @@ namespace DevTools.Apps
 
             Console.WriteLine("List of applications:");
             Console.WriteLine();
+
             table.Write(Format.MarkDown);
         }
-        
+
+        public void SelectVariant(string appName, string variantName)
+        {
+            if (!repository.Apps.TryGetValue(appName, out var app))
+                throw new Exception($"App not found: {appName}");
+
+            if (!app.Variants.TryGetValue(variantName, out var variant))
+                throw new Exception($"Variant not found: {variantName}");
+
+            Console.WriteLine($"Switching {app.Description} from {app.Selected ?? NotSetConst} to {variantName}");
+            app.Selected = variantName;
+
+            provider.Save(repository);
+        }
+
+
         public void SetDisabled(string appName, bool disabled)
         {
             if (!repository.Apps.TryGetValue(appName, out var app))
                 throw new Exception($"App not found: {appName}");
+
             app.Disabled = disabled;
 
-            Save();
+            provider.Save(repository);
         }
 
         public void AddApp(string appName, string description, string path)
@@ -105,10 +103,10 @@ namespace DevTools.Apps
                 Path = path
             });
 
-            Save();
+            provider.Save(repository);
         }
 
-        public void AddVariant(string appName, string variantName, string path)
+        public void AddVariant(string appName, string variantName, string[] paths)
         {
             if (!repository.Apps.TryGetValue(appName, out var app))
                 throw new Exception($"App not found: {appName}");
@@ -116,21 +114,11 @@ namespace DevTools.Apps
             app.Variants ??= new Dictionary<string, AppVariant>();
 
             if (app.Variants.TryGetValue(variantName, out var variant))
-            {
-                variant.Paths.Add("path");
-            }
+                variant.Paths.AddRange(paths);
             else
-            {
-                variant = new AppVariant {Paths = new List<string> {path}};
-                app.Variants.Add(variantName, variant);
-            }
+                app.Variants.Add(variantName, new AppVariant {Paths = paths.ToList()});
 
-            Save();
-        }
-
-        public void Save()
-        {
-            repository.SaveAs(repoFile);
+            provider.Save(repository);
         }
     }
 }

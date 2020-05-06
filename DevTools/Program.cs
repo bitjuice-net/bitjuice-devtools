@@ -8,27 +8,34 @@ namespace DevTools
     internal class Program
     {
         private static readonly string RepoFile = Path.Combine(Common.AssemblyDirectory, "config.json");
-        private static readonly string PathFile = Path.Combine(Common.AssemblyDirectory, "path.txt");
 
         private static void Main(string[] args)
         {
-            var manager = new AppManager(RepoFile, PathFile);
+            var manager = new AppManager(new AppRepositoryProvider(RepoFile));
             
-            var rootCommand = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
-            rootCommand.AddCommand(BuildUpdateCommand(manager));
-            rootCommand.AddCommand(BuildListCommand(manager));
-            rootCommand.AddCommand(BuildSelectCommand(manager));
-            rootCommand.AddCommand(BuildDisableCommand(manager));
-            rootCommand.AddCommand(BuildEnableCommand(manager));
-            rootCommand.AddCommand(BuildNewCommand(manager));
-            rootCommand.Invoke(args);
+            var cmd = BuildCommands(manager);
+            cmd.Invoke(args);
         }
 
-        private static Command BuildUpdateCommand(AppManager manager)
+        private static RootCommand BuildCommands(AppManager manager)
         {
-            return new Command("update", "Regenerates path.txt.")
+            var cmd = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
+
+            cmd.AddCommand(BuildPathCommand(manager));
+            cmd.AddCommand(BuildListCommand(manager));
+            cmd.AddCommand(BuildSelectCommand(manager));
+            cmd.AddCommand(BuildDisableCommand(manager));
+            cmd.AddCommand(BuildEnableCommand(manager));
+            cmd.AddCommand(BuildAddCommand(manager));
+            
+            return cmd;
+        }
+
+        private static Command BuildPathCommand(AppManager manager)
+        {
+            return new Command("path", "Get PATH string.")
             {
-                Handler = CommandHandler.Create(manager.UpdatePath)
+                Handler = CommandHandler.Create(manager.GetPath)
             };
         }
 
@@ -42,47 +49,47 @@ namespace DevTools
 
         private static Command BuildSelectCommand(AppManager manager)
         {
-            var cmd =  new Command("select", "Selects app variant to use.")
+            var cmd =  new Command("select", "Select app variant to use.")
             {
-                Handler = CommandHandler.Create((string app, string variant) =>
+                Handler = CommandHandler.Create((string appName, string variantName) =>
                 {
-                    manager.SelectVariant(app, variant);
+                    manager.SelectVariant(appName, variantName);
                 })
             };
             
-            cmd.AddArgument(new Argument<string>("app"));
-            cmd.AddArgument(new Argument<string>("variant"));
+            cmd.AddArgument(new Argument<string>("app-name"));
+            cmd.AddArgument(new Argument<string>("variant-name"));
 
             return cmd;
         }
 
         private static Command BuildDisableCommand(AppManager manager)
         {
-            var cmd = new Command("disable", "Enables application")
+            var cmd = new Command("disable", "Disable application.")
             {
-                Handler = CommandHandler.Create((string app) => manager.SetDisabled(app, true))
+                Handler = CommandHandler.Create((string appName) => manager.SetDisabled(appName, true))
             };
 
-            cmd.AddArgument(new Argument<string>("app"));
+            cmd.AddArgument(new Argument<string>("app-name"));
 
             return cmd;
         }
 
         private static Command BuildEnableCommand(AppManager manager)
         {
-            var cmd = new Command("enable", "Enables application")
+            var cmd = new Command("enable", "Enable application.")
             {
-                Handler = CommandHandler.Create((string app) => manager.SetDisabled(app, false))
+                Handler = CommandHandler.Create((string appName) => manager.SetDisabled(appName, false))
             };
 
-            cmd.AddArgument(new Argument<string>("app"));
+            cmd.AddArgument(new Argument<string>("app-name"));
 
             return cmd;
         }
 
-        private static Command BuildNewCommand(AppManager manager)
+        private static Command BuildAddCommand(AppManager manager)
         {
-            var cmd = new Command("new", "Creates new app or variant.");
+            var cmd = new Command("add", "Add new app or variant.");
 
             cmd.AddCommand(BuildNewAppCommand(manager));
             cmd.AddCommand(BuildNewVariantCommand(manager));
@@ -92,15 +99,15 @@ namespace DevTools
 
         private static Command BuildNewAppCommand(AppManager manager)
         {
-            var cmd = new Command("app", "Creates new app.")
+            var cmd = new Command("app", "Add new app.")
             {
-                Handler = CommandHandler.Create((string app, string description, string path) =>
+                Handler = CommandHandler.Create((string appName, string description, string path) =>
                 {
-                    manager.AddApp(app, description, path);
+                    manager.AddApp(appName, description, path);
                 })
             };
             
-            cmd.AddArgument(new Argument<string>("app"));
+            cmd.AddArgument(new Argument<string>("app-name"));
             cmd.AddArgument(new Argument<string>("description"));
             cmd.AddArgument(new Argument<string>("path"));
 
@@ -109,17 +116,20 @@ namespace DevTools
 
         private static Command BuildNewVariantCommand(AppManager manager)
         {
-            var cmd = new Command("variant", "Creates new variant.")
+            var cmd = new Command("variant", "Add new variant.")
             {
-                Handler = CommandHandler.Create((string app, string variant, string path) =>
+                Handler = CommandHandler.Create((string appName, string variantName, string[] paths) =>
                 {
-                    manager.AddVariant(app, variant, path);
+                    manager.AddVariant(appName, variantName, paths);
                 })
             };
 
-            cmd.AddArgument(new Argument<string>("app"));
-            cmd.AddArgument(new Argument<string>("variant"));
-            cmd.AddArgument(new Argument<string>("path"));
+            cmd.AddArgument(new Argument<string>("app-name"));
+            cmd.AddArgument(new Argument<string>("variant-name"));
+            cmd.AddArgument(new Argument<string>("paths")
+            {
+                Arity = new ArgumentArity(1, short.MaxValue)
+            });
 
             return cmd;
         }
