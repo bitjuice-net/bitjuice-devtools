@@ -66,7 +66,10 @@ namespace DevTools
 
             cmd.AddAlias("s");
             cmd.AddArgument(new Argument<string>("app-name"));
-            cmd.AddArgument(new Argument<string>("variant-name"));
+            cmd.AddArgument(new Argument<string>("variant-name")
+            {
+                Arity = new ArgumentArity(0, 1)
+            });
 
             return cmd;
         }

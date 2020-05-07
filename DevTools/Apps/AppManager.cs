@@ -72,8 +72,27 @@ namespace DevTools.Apps
             if (!repository.Apps.TryGetValue(appName, out var app))
                 throw new Exception($"App not found: {appName}");
 
-            if (!app.Variants.TryGetValue(variantName, out var variant))
-                throw new Exception($"Variant not found: {variantName}");
+            if (string.IsNullOrWhiteSpace(variantName))
+            {
+                var variants = app.Variants.ToArray();
+                for (var i = 0; i < variants.Length; i++) 
+                    Console.WriteLine($"[{i}] {variants[i].Key}");
+                Console.Write("Select variant to use: ");
+                var input = Console.ReadLine();
+                
+                if(!int.TryParse(input, out var selected))
+                    throw new Exception($"'{input}' is not a valid index");
+                
+                if(selected < 0 || selected >= variants.Length)
+                    throw new Exception($"Selected index is out of range");
+
+                variantName = variants[selected].Key;
+            }
+            else
+            {
+                if (!app.Variants.TryGetValue(variantName, out var variant))
+                    throw new Exception($"Variant not found: {variantName}");
+            }
 
             Console.WriteLine($"Switching {app.Description} from {app.Selected ?? NotSetConst} to {variantName}");
             app.Selected = variantName;
