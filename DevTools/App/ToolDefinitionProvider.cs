@@ -2,9 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 
-namespace DevTools.New
+namespace DevTools.App
 {
     public class ToolDefinitionProvider : IToolDefinitionProvider
     {
@@ -46,11 +45,11 @@ namespace DevTools.New
                 throw new ArgumentException($"Directory do not exists `{root}`", nameof(root));
 
             var apps = directory
-                .EnumerateFiles(".app")
+                .EnumerateFiles(".app", SearchOption.AllDirectories)
                 .Select(fileInfo => new ToolDefinition
                 {
-                    Manifest = JsonSerializer.Deserialize<ToolManifest>(File.ReadAllText(fileInfo.FullName)),
-                    Path = fileInfo.DirectoryName
+                    Path = fileInfo.DirectoryName,
+                    Manifest = JsonEx.DeserializeFromFile<ToolManifest>(fileInfo.FullName)
                 })
                 .ToList();
 

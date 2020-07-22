@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace DevTools.New
+namespace DevTools.App
 {
     public interface IToolDefinitionProvider
     {

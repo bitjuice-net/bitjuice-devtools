@@ -3,7 +3,7 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.IO;
 using System.Threading.Tasks;
-using DevTools.New;
+using DevTools.App;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 
-namespace DevTools.New
+namespace DevTools.App
 {
     public class ToolSettingsProvider : IToolSettingsProvider
     {

@@ -1,7 +1,7 @@
 ﻿using System;
 using Microsoft.Extensions.Options;
 
-namespace DevTools.New
+namespace DevTools.App
 {
     public class ToolManager : IToolManager
     {

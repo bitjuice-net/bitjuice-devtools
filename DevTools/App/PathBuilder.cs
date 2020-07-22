@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 
-namespace DevTools.New
+namespace DevTools.App
 {
     public class PathBuilder
     {

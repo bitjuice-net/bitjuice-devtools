@@ -1,4 +1,4 @@
-﻿namespace DevTools.New
+﻿namespace DevTools.App
 {
     public interface IToolManager
     {

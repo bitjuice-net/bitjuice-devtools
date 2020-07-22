@@ -1,8 +1,8 @@
-﻿namespace DevTools.New
+﻿namespace DevTools.App
 {
     public class ToolDefinition
     {
-        public ToolManifest Manifest { get; set; }
         public string Path { get; set; }
+        public ToolManifest Manifest { get; set; }
     }
 }
