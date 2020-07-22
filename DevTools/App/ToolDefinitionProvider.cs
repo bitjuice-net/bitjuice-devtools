@@ -42,7 +42,7 @@ namespace DevTools.New
                 throw new ArgumentNullException(nameof(root));
 
             var directory = new DirectoryInfo(root);
-            if(directory.Exists)
+            if(!directory.Exists)
                 throw new ArgumentException($"Directory do not exists `{root}`", nameof(root));
 
             var apps = directory
