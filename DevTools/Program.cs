@@ -1,7 +1,11 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using DevTools.Apps;
 using System.CommandLine;
 using System.CommandLine.Invocation;
+using System.ComponentModel.Design;
+using DevTools.New;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DevTools
 {
@@ -146,6 +150,18 @@ namespace DevTools
             });
 
             return cmd;
+        }
+
+        public IServiceProvider BuildIoC()
+        {
+            var services = new ServiceCollection();
+
+            services.AddSingleton<Manager>();
+            services.AddSingleton<IToolDefinitionCache, ToolDefinitionCache>();
+            services.AddSingleton<IToolDefinitionProvider, ToolDefinitionProvider>();
+            services.AddSingleton<IToolSettingsProvider, ToolSettingsProvider>();
+
+            return services.BuildServiceProvider();
         }
     }
 }
