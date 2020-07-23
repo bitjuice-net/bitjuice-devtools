@@ -7,32 +7,31 @@ namespace DevTools.App
 {
     public class ToolDefinitionProvider : IToolDefinitionProvider
     {
-        private readonly IToolDefinitionCache cache;
-        private Dictionary<string, List<ToolDefinition>> tools;
-        private Dictionary<string, List<ToolDefinition>> Tools
-        {
-            get => tools ??= cache.Load();
-            set { tools = value; cache.Save(tools); }
-        }
+        private static readonly string FileName = PathEx.GetRootedPath("cache.json");
 
-        public ToolDefinitionProvider(IToolDefinitionCache cache)
+        private readonly IStorage storage;
+
+        private Dictionary<string, List<ToolDefinition>> tools;
+        private Dictionary<string, List<ToolDefinition>> Tools => tools ??= storage.Load<Dictionary<string, List<ToolDefinition>>>(FileName);
+
+        public ToolDefinitionProvider(IStorage storage)
         {
-            this.cache = cache;
+            this.storage = storage;
         }
 
         public List<string> GetNames()
         {
-            return Tools.Keys.ToList();
+            return Tools.Keys.OrderBy(i => i).ToList();
         }
 
-        public List<ToolDefinition> GetVersions(string name)
+        public List<ToolDefinition> GetVersions(string application)
         {
-            return Tools.TryGetValue(name, out var versions) ? versions : new List<ToolDefinition>();
+            return Tools.TryGetValue(application, out var versions) ? versions : new List<ToolDefinition>();
         }
 
-        public ToolDefinition GetVersion(string name, string version)
+        public ToolDefinition GetVersion(string application, string version)
         {
-            return GetVersions(name).SingleOrDefault(i => i.Manifest.Version == version);
+            return GetVersions(application).SingleOrDefault(i => i.Manifest.Version == version);
         }
 
         public void Discover(string root)
@@ -49,11 +48,12 @@ namespace DevTools.App
                 .Select(fileInfo => new ToolDefinition
                 {
                     Path = fileInfo.DirectoryName,
-                    Manifest = JsonEx.DeserializeFromFile<ToolManifest>(fileInfo.FullName)
+                    Manifest = storage.Load<ToolManifest>(fileInfo.FullName)
                 })
                 .ToList();
 
-            Tools = apps.GroupBy(i => i.Manifest.Name).ToDictionary(i => i.Key, i => i.ToList());
+            tools = apps.GroupBy(i => i.Manifest.Name).ToDictionary(i => i.Key, i => i.ToList());
+            storage.Save(FileName, tools);
         }
     }
 }

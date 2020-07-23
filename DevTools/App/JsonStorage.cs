@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace DevTools.App
 {
-    public class JsonEx
+    public class JsonStorage : IStorage
     {
         private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
         {
@@ -12,12 +12,12 @@ namespace DevTools.App
             WriteIndented = true
         };
 
-        public static T DeserializeFromFile<T>(string fileName)
+        public T Load<T>(string fileName) where T : new()
         {
-            return JsonSerializer.Deserialize<T>(File.ReadAllText(fileName), Options);
+            return File.Exists(fileName) ? JsonSerializer.Deserialize<T>(File.ReadAllText(fileName), Options) : new T();
         }
 
-        public static void SerializeToFile<T>(string fileName, T obj)
+        public void Save<T>(string fileName, T obj) where T : new()
         {
             File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));
         }

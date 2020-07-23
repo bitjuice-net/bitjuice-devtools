@@ -1,8 +1,6 @@
 ﻿using System;
 using System.CommandLine;
 using System.CommandLine.Invocation;
-using System.IO;
-using System.Threading.Tasks;
 using DevTools.App;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,32 +9,40 @@ namespace DevTools
 {
     internal class Program
     {
-        private static readonly string RepoFile = Path.Combine(Common.AssemblyDirectory, "config.json");
-
         private static void Main(string[] args)
         {
-            var configuration = new ConfigurationBuilder()
-                .AddJsonFile("settings.json")
-                .Build();
-
+            var configuration = new ConfigurationBuilder().AddJsonFile("settings.json").Build();
             var manager = BuildIoC(configuration).GetService<IToolManager>();
-            manager.Discover();
+            var command = BuildCommands(manager);
 
-            //await Task.Delay(100);
-            //await BuildCommands(manager).InvokeAsync(args);
+            command.Invoke(args);
+        }
+
+        public static IServiceProvider BuildIoC(IConfigurationRoot configuration)
+        {
+            var services = new ServiceCollection();
+
+            services.Configure<Settings>(configuration);
+
+            services.AddSingleton<IStorage, JsonStorage>();
+            services.AddSingleton<IToolManager, ToolManager>();
+            services.AddSingleton<IToolDefinitionProvider, ToolDefinitionProvider>();
+            services.AddSingleton<IToolSettingsProvider, ToolSettingsProvider>();
+
+            return services.BuildServiceProvider();
         }
 
         private static RootCommand BuildCommands(IToolManager manager)
         {
             var cmd = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
 
-             cmd.AddCommand(BuildPathCommand(manager));
-            // cmd.AddCommand(BuildListCommand(manager));
-            // cmd.AddCommand(BuildSelectCommand(manager));
-            // cmd.AddCommand(BuildDisableCommand(manager));
-            // cmd.AddCommand(BuildEnableCommand(manager));
-            // cmd.AddCommand(BuildAddCommand(manager));
-            
+            cmd.AddCommand(BuildDiscoverCommand(manager));
+            cmd.AddCommand(BuildPathCommand(manager));
+            cmd.AddCommand(BuildListCommand(manager));
+            cmd.AddCommand(BuildSelectCommand(manager));
+            cmd.AddCommand(BuildDisableCommand(manager));
+            cmd.AddCommand(BuildEnableCommand(manager));
+
             return cmd;
         }
 
@@ -46,130 +52,76 @@ namespace DevTools
             {
                 Handler = CommandHandler.Create(manager.GetPath)
             };
+            
+            return cmd;
+        }
 
-            cmd.AddAlias("p");
+        private static Command BuildDiscoverCommand(IToolManager manager)
+        {
+            var cmd = new Command("discover", "Discover applications.")
+            {
+                Handler = CommandHandler.Create(manager.Discover)
+            };
 
             return cmd;
         }
 
-        //private static Command BuildListCommand(AppManager manager)
-        //{
-        //    var cmd = new Command("list", "List available applications.")
-        //    {
-        //        Handler = CommandHandler.Create(manager.ListApps)
-        //    };
-
-        //    cmd.AddAlias("l");
-
-        //    return cmd;
-        //}
-
-        //private static Command BuildSelectCommand(AppManager manager)
-        //{
-        //    var cmd =  new Command("select", "Select app variant to use.")
-        //    {
-        //        Handler = CommandHandler.Create((string appName, string variantName) =>
-        //        {
-        //            manager.SelectVariant(appName, variantName);
-        //        })
-        //    };
-
-        //    cmd.AddAlias("s");
-        //    cmd.AddArgument(new Argument<string>("app-name"));
-        //    cmd.AddArgument(new Argument<string>("variant-name")
-        //    {
-        //        Arity = new ArgumentArity(0, 1)
-        //    });
-
-        //    return cmd;
-        //}
-
-        //private static Command BuildDisableCommand(AppManager manager)
-        //{
-        //    var cmd = new Command("disable", "Disable application.")
-        //    {
-        //        Handler = CommandHandler.Create((string appName) => manager.SetDisabled(appName, true))
-        //    };
-
-        //    cmd.AddAlias("d");
-        //    cmd.AddArgument(new Argument<string>("app-name"));
-
-        //    return cmd;
-        //}
-
-        //private static Command BuildEnableCommand(AppManager manager)
-        //{
-        //    var cmd = new Command("enable", "Enable application.")
-        //    {
-        //        Handler = CommandHandler.Create((string appName) => manager.SetDisabled(appName, false))
-        //    };
-
-        //    cmd.AddAlias("e");
-        //    cmd.AddArgument(new Argument<string>("app-name"));
-
-        //    return cmd;
-        //}
-
-        //private static Command BuildAddCommand(AppManager manager)
-        //{
-        //    var cmd = new Command("add", "Add new app or variant.");
-
-        //    cmd.AddAlias("a");
-        //    cmd.AddCommand(BuildNewAppCommand(manager));
-        //    cmd.AddCommand(BuildNewVariantCommand(manager));
-
-        //    return cmd;
-        //}
-
-        //private static Command BuildNewAppCommand(AppManager manager)
-        //{
-        //    var cmd = new Command("app", "Add new app.")
-        //    {
-        //        Handler = CommandHandler.Create((string appName, string description, string path) =>
-        //        {
-        //            manager.AddApp(appName, description, path);
-        //        })
-        //    };
-
-        //    cmd.AddArgument(new Argument<string>("app-name"));
-        //    cmd.AddArgument(new Argument<string>("description"));
-        //    cmd.AddArgument(new Argument<string>("path"));
-
-        //    return cmd;
-        //}
-
-        //private static Command BuildNewVariantCommand(AppManager manager)
-        //{
-        //    var cmd = new Command("variant", "Add new variant.")
-        //    {
-        //        Handler = CommandHandler.Create((string appName, string variantName, string[] paths) =>
-        //        {
-        //            manager.AddVariant(appName, variantName, paths);
-        //        })
-        //    };
-
-        //    cmd.AddArgument(new Argument<string>("app-name"));
-        //    cmd.AddArgument(new Argument<string>("variant-name"));
-        //    cmd.AddArgument(new Argument<string>("paths")
-        //    {
-        //        Arity = new ArgumentArity(1, short.MaxValue)
-        //    });
-
-        //    return cmd;
-        //}
-
-        public static IServiceProvider BuildIoC(IConfigurationRoot configuration)
+        private static Command BuildListCommand(IToolManager manager)
         {
-            var services = new ServiceCollection();
+            var cmd = new Command("list", "List available applications.")
+            {
+                Handler = CommandHandler.Create(manager.List)
+            };
 
-            services.Configure<Settings>(configuration);
+            cmd.AddAlias("ls");
 
-            services.AddSingleton<IToolManager, ToolManager>();
-            services.AddSingleton<IToolDefinitionCache, ToolDefinitionCache>();
-            services.AddSingleton<IToolDefinitionProvider, ToolDefinitionProvider>();
-            services.AddSingleton<IToolSettingsProvider, ToolSettingsProvider>();
+            return cmd;
+        }
 
-            return services.BuildServiceProvider();
+        private static Command BuildSelectCommand(IToolManager manager)
+        {
+            var cmd = new Command("select", "Select application version.")
+            {
+                Handler = CommandHandler.Create((string application, string version) =>
+                {
+                    manager.Select(application, version);
+                })
+            };
+
+            cmd.AddAlias("s");
+            cmd.AddArgument(new Argument<string>("application"));
+            cmd.AddArgument(new Argument<string>("version")
+            {
+                Arity = new ArgumentArity(0, 1)
+            });
+
+            return cmd;
+        }
+
+        private static Command BuildDisableCommand(IToolManager manager)
+        {
+            var cmd = new Command("disable", "Disable application.")
+            {
+                Handler = CommandHandler.Create((string application) => manager.SetDisabled(application, true))
+            };
+
+            cmd.AddAlias("d");
+            cmd.AddArgument(new Argument<string>("application"));
+
+            return cmd;
+        }
+
+        private static Command BuildEnableCommand(IToolManager manager)
+        {
+            var cmd = new Command("enable", "Enable application.")
+            {
+                Handler = CommandHandler.Create((string application) => manager.SetDisabled(application, false))
+            };
+
+            cmd.AddAlias("e");
+            cmd.AddArgument(new Argument<string>("application"));
+
+            return cmd;
         }
     }
 }

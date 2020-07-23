@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 
 namespace DevTools.App
 {
@@ -21,12 +20,8 @@ namespace DevTools.App
 
             var appPath = PathEx.GetRootedPath(version.Path, basePath);
 
-            foreach (var includePath in version.Manifest.Paths)
-            {
-                if (Path.IsPathRooted(includePath))
-                    paths.Add(includePath);
+            foreach (var includePath in version.Manifest.Paths) 
                 paths.Add(PathEx.GetRootedPath(includePath, appPath));
-            }
         }
 
         public string Build()
