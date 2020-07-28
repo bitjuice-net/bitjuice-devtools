@@ -24,18 +24,17 @@ namespace DevTools.App
 
         public void GetPath()
         {
-            var builder = new PathBuilder(PathEx.GetRootedPath(settings.RootPath));
+            var builder = new PathBuilder();
 
             foreach (var version in GetTools()) 
                 builder.AddApplication(version);
 
             Console.WriteLine(builder.Build());
         }
-
-
+        
         public void GetEnvs()
         {
-            var builder = new EnvsBuilder(PathEx.GetRootedPath(settings.RootPath));
+            var builder = new EnvsBuilder();
 
             foreach (var version in GetTools())
                 builder.AddApplication(version);

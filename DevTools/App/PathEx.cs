@@ -6,12 +6,7 @@ namespace DevTools.App
     {
         public static string GetRootedPath(string path)
         {
-            return GetRootedPath(path, Common.AssemblyDirectory);
-        }
-
-        public static string GetRootedPath(string path, string basePath)
-        {
-            return Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(basePath, path));
+            return Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(Common.AssemblyDirectory, path));
         }
     }
 }

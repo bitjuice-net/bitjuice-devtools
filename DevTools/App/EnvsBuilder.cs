@@ -5,35 +5,25 @@ namespace DevTools.App
 {
     public class EnvsBuilder
     {
-        private readonly List<string> envs = new List<string>();
-        private readonly string basePath;
-
-        public EnvsBuilder(string basePath)
-        {
-            this.basePath = basePath;
-        }
+        private readonly List<string> values = new List<string>();
 
         public void AddApplication(ToolDefinition version)
         {
             if (version == null)
                 throw new ArgumentNullException(nameof(version));
 
-            var appPath = PathEx.GetRootedPath(version.Path, basePath);
-
-            if(version.Manifest.Envs == null)
+            if (version.Manifest.Envs == null)
                 return;
 
-            foreach (var (key, value) in version.Manifest.Envs)
-            {
-                var path = Environment.ExpandEnvironmentVariables(value);
-                path = PathEx.GetRootedPath(path, appPath);
-                envs.Add($"{key}={path}");
-            }
+            Environment.SetEnvironmentVariable("APPDIR", version.Path);
+
+            foreach (var (key, value) in version.Manifest.Envs) 
+                values.Add($"{key}={Environment.ExpandEnvironmentVariables(value)}");
         }
 
         public string Build()
         {
-            return string.Join(Environment.NewLine, envs);
+            return string.Join(Environment.NewLine, values);
         }
     }
 }

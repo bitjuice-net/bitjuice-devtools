@@ -5,28 +5,25 @@ namespace DevTools.App
 {
     public class PathBuilder
     {
-        private readonly List<string> paths = new List<string>();
-        private readonly string basePath;
-
-        public PathBuilder(string basePath)
-        {
-            this.basePath = basePath;
-        }
+        private readonly List<string> values = new List<string>();
 
         public void AddApplication(ToolDefinition version)
         {
             if (version == null) 
                 throw new ArgumentNullException(nameof(version));
 
-            var appPath = PathEx.GetRootedPath(version.Path, basePath);
+            if (version.Manifest.Paths == null)
+                return;
+
+            Environment.SetEnvironmentVariable("APPDIR", version.Path);
 
             foreach (var includePath in version.Manifest.Paths) 
-                paths.Add(PathEx.GetRootedPath(includePath, appPath));
+                values.Add(Environment.ExpandEnvironmentVariables(includePath));
         }
 
         public string Build()
         {
-            return string.Join(';', paths);
+            return string.Join(';', values);
         }
     }
 }
