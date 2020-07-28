@@ -14,7 +14,7 @@ namespace DevTools
             var configuration = new ConfigurationBuilder().AddJsonFile("settings.json").Build();
             var manager = BuildIoC(configuration).GetService<IToolManager>();
             var command = BuildCommands(manager);
-
+            
             command.Invoke(args);
         }
 
@@ -38,6 +38,7 @@ namespace DevTools
 
             cmd.AddCommand(BuildDiscoverCommand(manager));
             cmd.AddCommand(BuildPathCommand(manager));
+            cmd.AddCommand(BuildEnvsCommand(manager));
             cmd.AddCommand(BuildListCommand(manager));
             cmd.AddCommand(BuildSelectCommand(manager));
             cmd.AddCommand(BuildDisableCommand(manager));
@@ -53,6 +54,16 @@ namespace DevTools
                 Handler = CommandHandler.Create(manager.GetPath)
             };
             
+            return cmd;
+        }
+
+        private static Command BuildEnvsCommand(IToolManager manager)
+        {
+            var cmd = new Command("envs", "Get environment variables.")
+            {
+                Handler = CommandHandler.Create(manager.GetEnvs)
+            };
+
             return cmd;
         }
 

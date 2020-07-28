@@ -7,5 +7,6 @@ namespace DevTools.App
         public string Name { get; set; }
         public string Version { get; set; }
         public List<string> Paths { get; set; }
+        public Dictionary<string, string> Envs { get; set; }
     }
 }

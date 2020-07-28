@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using ConsoleTables;
 using Microsoft.Extensions.Options;
@@ -25,22 +26,19 @@ namespace DevTools.App
         {
             var builder = new PathBuilder(PathEx.GetRootedPath(settings.RootPath));
 
-            foreach (var name in toolDefinitionProvider.GetNames())
-            {
-                var toolSettings = toolSettingsProvider.GetSettings(name);
-
-                if (toolSettings.IsDisabled)
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(toolSettings.Version))
-                    continue;
-
-                var version = toolDefinitionProvider.GetVersion(name, toolSettings.Version);
-                if(version == null)
-                    continue;
-
+            foreach (var version in GetTools()) 
                 builder.AddApplication(version);
-            }
+
+            Console.WriteLine(builder.Build());
+        }
+
+
+        public void GetEnvs()
+        {
+            var builder = new EnvsBuilder(PathEx.GetRootedPath(settings.RootPath));
+
+            foreach (var version in GetTools())
+                builder.AddApplication(version);
 
             Console.WriteLine(builder.Build());
         }
@@ -100,6 +98,26 @@ namespace DevTools.App
         public void SetDisabled(string application, bool isDisabled)
         {
             toolSettingsProvider.UpdateSettings(application, s => s.IsDisabled = isDisabled);
+        }
+        
+        private IEnumerable<ToolDefinition> GetTools()
+        {
+            foreach (var name in toolDefinitionProvider.GetNames())
+            {
+                var toolSettings = toolSettingsProvider.GetSettings(name);
+
+                if (toolSettings.IsDisabled)
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(toolSettings.Version))
+                    continue;
+
+                var version = toolDefinitionProvider.GetVersion(name, toolSettings.Version);
+                if (version == null)
+                    continue;
+
+                yield return version;
+            }
         }
     }
 }

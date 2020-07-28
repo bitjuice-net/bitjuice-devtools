@@ -3,6 +3,7 @@
     public interface IToolManager
     {
         void GetPath();
+        void GetEnvs();
         void Discover();
         void List();
         void Select(string application, string version);
