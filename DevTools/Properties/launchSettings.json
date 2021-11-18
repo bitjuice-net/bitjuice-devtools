@@ -2,7 +2,7 @@
   "profiles": {
     "DevTools": {
       "commandName": "Project",
-      "commandLineArgs": "select node 8.9.3"
+      "commandLineArgs": "path"
     }
   }
 }
