@@ -2,7 +2,7 @@
   "profiles": {
     "DevTools": {
       "commandName": "Project",
-      "commandLineArgs": "path"
+      "commandLineArgs": "path-envs"
     }
   }
 }

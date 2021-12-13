@@ -2,6 +2,7 @@
 {
     public interface IToolManager
     {
+        void GetSetup();
         void GetPath();
         void GetEnvs();
         void Discover();

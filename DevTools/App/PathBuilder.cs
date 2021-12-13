@@ -5,7 +5,7 @@ namespace DevTools.App
 {
     public class PathBuilder
     {
-        private readonly List<string> values = new List<string>();
+        private readonly List<string> values = new();
 
         public void AddApplication(ToolDefinition version)
         {

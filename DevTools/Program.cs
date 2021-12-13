@@ -37,12 +37,23 @@ namespace DevTools
             var cmd = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
 
             cmd.AddCommand(BuildDiscoverCommand(manager));
+            cmd.AddCommand(BuildSetupCommand(manager));
             cmd.AddCommand(BuildPathCommand(manager));
             cmd.AddCommand(BuildEnvsCommand(manager));
             cmd.AddCommand(BuildListCommand(manager));
             cmd.AddCommand(BuildSelectCommand(manager));
             cmd.AddCommand(BuildDisableCommand(manager));
             cmd.AddCommand(BuildEnableCommand(manager));
+
+            return cmd;
+        }
+
+        private static Command BuildSetupCommand(IToolManager manager)
+        {
+            var cmd = new Command("setup", "Get setup string.")
+            {
+                Handler = CommandHandler.Create(manager.GetSetup)
+            };
 
             return cmd;
         }

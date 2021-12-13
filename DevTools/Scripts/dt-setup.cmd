@@ -1,19 +1,10 @@
 @echo off
 
 set PATH=%PATH%;%~dp0
-set BASEPATH=%PATH%
+set DT_BASEPATH=%PATH%
 
-set PATH_FILENAME=%~dp0..\path.txt
-set ENVS_FILENAME=%~dp0..\envs.txt
+set DT_SETUP_FILENAME=%~dp0..\setup.txt
+call %~dp0\..\devtools.exe setup > "%DT_SETUP_FILENAME%"
 
-call %~dp0\..\devtools.exe path > "%PATH_FILENAME%"
-call %~dp0\..\devtools.exe envs > "%ENVS_FILENAME%"
-
-set /p DEVPATH=<"%PATH_FILENAME%"
-
-set PATH=%BASEPATH%;%DEVPATH%
-for /f "tokens=*" %%i in (%ENVS_FILENAME%) do set %%i
-
-set PATH_FILENAME=
-set ENVS_FILENAME=
-set DEVPATH=
+for /f "tokens=*" %%i in (%DT_SETUP_FILENAME%) do set %%i
+set PATH=%DT_BASEPATH%;%DT_PATH%

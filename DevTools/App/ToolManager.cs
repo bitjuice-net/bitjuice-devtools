@@ -8,7 +8,6 @@ namespace DevTools.App
 {
     public class ToolManager : IToolManager
     {
-        private const string EmptyConst = "<empty>";
         private const string NotSetConst = "<not set>";
 
         private readonly Settings settings;
@@ -20,6 +19,21 @@ namespace DevTools.App
             this.settings = settings.Value;
             this.toolDefinitionProvider = toolDefinitionProvider;
             this.toolSettingsProvider = toolSettingsProvider;
+        }
+
+        public void GetSetup()
+        {
+            var pathBuilder = new PathBuilder();
+            var envsBuilder = new EnvsBuilder();
+
+            foreach (var version in GetTools())
+            {
+                pathBuilder.AddApplication(version);
+                envsBuilder.AddApplication(version);
+            }
+
+            Console.WriteLine("DT_PATH=" + pathBuilder.Build());
+            Console.WriteLine(envsBuilder.Build());
         }
 
         public void GetPath()
