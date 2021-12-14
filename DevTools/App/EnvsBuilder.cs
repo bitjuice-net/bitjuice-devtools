@@ -23,7 +23,7 @@ namespace DevTools.App
 
         public string Build()
         {
-            return string.Join(Environment.NewLine, values);
+            return values.Join(Environment.NewLine);
         }
     }
 }

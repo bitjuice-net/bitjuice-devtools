@@ -58,7 +58,7 @@ namespace DevTools.App
 
         public void Discover()
         {
-            toolDefinitionProvider.Discover(PathEx.GetRootedPath(settings.RootPath));
+            toolDefinitionProvider.Discover(PathUtils.GetRootedPath(settings.RootPath));
         }
 
         public void List()
@@ -92,7 +92,7 @@ namespace DevTools.App
                     throw new Exception($"'{input}' is not a valid index");
                 
                 if (selected < 0 || selected >= versions.Count)
-                    throw new Exception($"Selected index is out of range");
+                    throw new Exception("Selected index is out of range");
 
                 version = versions[selected].Manifest.Version;
             }

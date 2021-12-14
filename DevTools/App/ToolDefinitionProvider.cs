@@ -7,7 +7,7 @@ namespace DevTools.App
 {
     public class ToolDefinitionProvider : IToolDefinitionProvider
     {
-        private static readonly string FileName = PathEx.GetRootedPath("cache.json");
+        private static readonly string FileName = PathUtils.GetRootedPath("cache.json");
 
         private readonly IStorage storage;
 

@@ -5,7 +5,7 @@ namespace DevTools.App
 {
     public class JsonStorage : IStorage
     {
-        private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
+        private static readonly JsonSerializerOptions Options = new()
         {
             PropertyNameCaseInsensitive = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

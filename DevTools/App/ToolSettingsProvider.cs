@@ -6,7 +6,7 @@ namespace DevTools.App
 {
     public class ToolSettingsProvider : IToolSettingsProvider
     {
-        private static readonly string FileName = PathEx.GetRootedPath("tool-settings.json");
+        private static readonly string FileName = PathUtils.GetRootedPath("tool-settings.json");
 
         private readonly IStorage storage;
         private readonly IToolDefinitionProvider definitionProvider;
@@ -34,12 +34,6 @@ namespace DevTools.App
             }
 
             return config;
-        }
-
-        public void SetSettings(string application, ToolSettings settings)
-        {
-            Applications[application] = settings;
-            storage.Save(FileName, Applications);
         }
 
         public void UpdateSettings(string application, Action<ToolSettings> action)
