@@ -40,12 +40,12 @@ namespace DevTools.App
         {
             var builder = new PathBuilder();
 
-            foreach (var version in GetTools()) 
+            foreach (var version in GetTools())
                 builder.AddApplication(version);
 
             Console.WriteLine(builder.Build());
         }
-        
+
         public void GetEnvs()
         {
             var builder = new EnvsBuilder();
@@ -64,17 +64,17 @@ namespace DevTools.App
         public void List()
         {
             var table = new ConsoleTable("Name", "Version", "Available", "Disabled");
-            
+
             foreach (var name in toolDefinitionProvider.GetNames())
             {
                 var versions = toolDefinitionProvider.GetVersions(name).Select(i => i.Manifest.Version).Join(", ");
                 var toolSettings = toolSettingsProvider.GetSettings(name);
                 table.AddRow(name, toolSettings.Version ?? NotSetConst, versions, toolSettings.IsDisabled);
             }
-            
+
             Console.WriteLine("List of applications:");
             Console.WriteLine();
-            
+
             table.Write(Format.MarkDown);
         }
 
@@ -83,14 +83,17 @@ namespace DevTools.App
             if (string.IsNullOrWhiteSpace(version))
             {
                 var versions = toolDefinitionProvider.GetVersions(application);
+                if (!versions.Any())
+                    return;
+
                 for (var i = 0; i < versions.Count; i++)
                     Console.WriteLine($"[{i}] {versions[i].Manifest.Version}");
                 Console.Write("Select version to use: ");
                 var input = Console.ReadLine();
-                
+
                 if (!int.TryParse(input, out var selected))
                     throw new Exception($"'{input}' is not a valid index");
-                
+
                 if (selected < 0 || selected >= versions.Count)
                     throw new Exception("Selected index is out of range");
 
@@ -98,7 +101,7 @@ namespace DevTools.App
             }
 
             var toolDefinition = toolDefinitionProvider.GetVersion(application, version);
-            if(toolDefinition == null)
+            if (toolDefinition == null)
                 return;
 
             toolSettingsProvider.UpdateSettings(application, s =>
@@ -112,7 +115,7 @@ namespace DevTools.App
         {
             toolSettingsProvider.UpdateSettings(application, s => s.IsDisabled = isDisabled);
         }
-        
+
         private IEnumerable<ToolDefinition> GetTools()
         {
             foreach (var name in toolDefinitionProvider.GetNames())
