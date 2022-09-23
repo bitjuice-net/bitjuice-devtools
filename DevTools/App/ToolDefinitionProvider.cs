@@ -26,7 +26,9 @@ namespace DevTools.App
 
         public List<ToolDefinition> GetVersions(string application)
         {
-            return Tools.TryGetValue(application, out var versions) ? versions : new List<ToolDefinition>();
+            return Tools.TryGetValue(application, out var versions) 
+                ? versions.OrderBy(i => Version.TryParse(i.Manifest.Version, out var v) ? v : new Version()).ToList() 
+                : new List<ToolDefinition>();
         }
 
         public ToolDefinition GetVersion(string application, string version)

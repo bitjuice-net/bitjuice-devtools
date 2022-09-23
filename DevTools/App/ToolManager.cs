@@ -82,7 +82,7 @@ namespace DevTools.App
         {
             if (string.IsNullOrWhiteSpace(version))
             {
-                var versions = toolDefinitionProvider.GetVersions(application);
+                var versions = toolDefinitionProvider.GetVersions(application).ToList();
                 if (!versions.Any())
                     return;
 
