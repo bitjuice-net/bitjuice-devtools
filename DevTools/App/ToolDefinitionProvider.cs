@@ -54,6 +54,14 @@ namespace DevTools.App
                 })
                 .ToList();
 
+            
+
+            foreach (var app in apps)
+            {
+                var dirName = Path.GetFileName(app.Path);
+                app.Manifest.Version = app.Manifest.Version.Replace("%DIRNAME%", dirName);
+            }
+
             tools = apps.GroupBy(i => i.Manifest.Name).ToDictionary(i => i.Key, i => i.ToList());
             storage.Save(FileName, tools);
         }

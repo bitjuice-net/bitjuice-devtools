@@ -2,7 +2,15 @@
   "profiles": {
     "DevTools": {
       "commandName": "Project",
-      "commandLineArgs": "s node"
+      "commandLineArgs": ""
+    },
+    "DevTools List": {
+      "commandName": "Project",
+      "commandLineArgs": "ls"
+    },
+    "DevTools Discover": {
+      "commandName": "Project",
+      "commandLineArgs": "discover"
     }
   }
 }
