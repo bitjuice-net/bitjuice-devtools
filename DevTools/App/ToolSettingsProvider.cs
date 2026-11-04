@@ -26,9 +26,8 @@ namespace DevTools.App
             {
                 config = new ToolSettings();
 
-                var versions = definitionProvider.GetVersions(application);
-                if (versions.Any())
-                    config.Version = versions.First().Manifest.Version;
+                if (definitionProvider.GetVersions(application).Any())
+                    config.Version = MetaVersion.Latest;
 
                 Applications.Add(application, config);
             }

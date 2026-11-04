@@ -80,7 +80,7 @@ namespace DevTools.App
                 }
 
                 var selected = toolSettingsProvider.GetSettings(application).Version;
-                if (selected == null || versions.Any(i => i.Manifest.Version == selected))
+                if (selected == null || toolDefinitionProvider.GetVersion(application, selected) != null)
                     continue;
 
                 toolSettingsProvider.UpdateSettings(application, s => s.Version = null);
@@ -103,7 +103,7 @@ namespace DevTools.App
             {
                 var versions = toolDefinitionProvider.GetVersions(name).Select(i => i.Manifest.Version).ToList();
                 var toolSettings = toolSettingsProvider.GetSettings(name);
-                table.AddRow(name, toolSettings.Version ?? NotSetConst, versions.Join(", "), GetStatus(toolSettings, versions));
+                table.AddRow(name, FormatVersion(name, toolSettings.Version), versions.Join(", "), GetStatus(name, toolSettings));
             }
 
             Console.WriteLine("List of applications:");
@@ -120,18 +120,20 @@ namespace DevTools.App
                 if (!versions.Any())
                     return;
 
-                for (var i = 0; i < versions.Count; i++)
-                    Console.WriteLine($"[{i}] {versions[i].Manifest.Version}");
+                var choices = versions.Select(i => i.Manifest.Version).Concat(new[] { MetaVersion.Latest, MetaVersion.Oldest }).ToList();
+
+                for (var i = 0; i < choices.Count; i++)
+                    Console.WriteLine($"[{i}] {choices[i]}");
                 Console.Write("Select version to use: ");
                 var input = Console.ReadLine();
 
                 if (!int.TryParse(input, out var selected))
                     throw new Exception($"'{input}' is not a valid index");
 
-                if (selected < 0 || selected >= versions.Count)
+                if (selected < 0 || selected >= choices.Count)
                     throw new Exception("Selected index is out of range");
 
-                version = versions[selected].Manifest.Version;
+                version = choices[selected];
             }
 
             var toolDefinition = toolDefinitionProvider.GetVersion(application, version);
@@ -140,8 +142,9 @@ namespace DevTools.App
 
             toolSettingsProvider.UpdateSettings(application, s =>
             {
-                Console.WriteLine($"Switching {application} from {s.Version ?? NotSetConst} to {toolDefinition.Manifest.Version}");
-                s.Version = toolDefinition.Manifest.Version;
+                var target = MetaVersion.IsMeta(version) ? version : toolDefinition.Manifest.Version;
+                Console.WriteLine($"Switching {application} from {FormatVersion(application, s.Version)} to {FormatVersion(application, target)}");
+                s.Version = target;
             });
         }
 
@@ -150,9 +153,24 @@ namespace DevTools.App
             toolSettingsProvider.UpdateSettings(application, s => s.IsDisabled = isDisabled);
         }
 
-        private static string GetStatus(ToolSettings toolSettings, List<string> versions)
+        private string FormatVersion(string application, string version)
         {
-            if (!versions.Any() || (toolSettings.Version != null && !versions.Contains(toolSettings.Version)))
+            if (version == null)
+                return NotSetConst;
+
+            if (!MetaVersion.IsMeta(version))
+                return version;
+
+            var resolved = toolDefinitionProvider.GetVersion(application, version);
+            return resolved == null || resolved.Manifest.Version == version ? version : $"{version} ({resolved.Manifest.Version})";
+        }
+
+        private string GetStatus(string application, ToolSettings toolSettings)
+        {
+            if (!toolDefinitionProvider.GetVersions(application).Any())
+                return "Orphaned";
+
+            if (toolSettings.Version != null && toolDefinitionProvider.GetVersion(application, toolSettings.Version) == null)
                 return "Orphaned";
 
             return toolSettings.IsDisabled ? "Disabled" : "Enabled";

@@ -33,7 +33,18 @@ namespace DevTools.App
 
         public ToolDefinition GetVersion(string application, string version)
         {
-            return GetVersions(application).SingleOrDefault(i => i.Manifest.Version == version);
+            var versions = GetVersions(application);
+
+            var exact = versions.SingleOrDefault(i => i.Manifest.Version == version);
+            if (exact != null)
+                return exact;
+
+            return version switch
+            {
+                MetaVersion.Latest => versions.LastOrDefault(),
+                MetaVersion.Oldest => versions.FirstOrDefault(),
+                _ => null
+            };
         }
 
         public void Discover(string root)
