@@ -18,7 +18,8 @@ namespace DevTools
             BuildApp(config)
                 .GetRequiredService<ICommandFactory>()
                 .CreateRootCommand()
-                .Invoke(args);
+                .Parse(args)
+                .Invoke();
         }
 
         public static IServiceProvider BuildApp(IConfigurationRoot configuration)

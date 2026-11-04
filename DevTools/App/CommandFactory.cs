@@ -15,14 +15,14 @@ internal class CommandFactory : ICommandFactory
     {
         var cmd = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
 
-        cmd.AddCommand(BuildDiscoverCommand());
-        cmd.AddCommand(BuildSetupCommand());
-        cmd.AddCommand(BuildPathCommand());
-        cmd.AddCommand(BuildEnvsCommand());
-        cmd.AddCommand(BuildListCommand());
-        cmd.AddCommand(BuildSelectCommand());
-        cmd.AddCommand(BuildDisableCommand());
-        cmd.AddCommand(BuildEnableCommand());
+        cmd.Subcommands.Add(BuildDiscoverCommand());
+        cmd.Subcommands.Add(BuildSetupCommand());
+        cmd.Subcommands.Add(BuildPathCommand());
+        cmd.Subcommands.Add(BuildEnvsCommand());
+        cmd.Subcommands.Add(BuildListCommand());
+        cmd.Subcommands.Add(BuildSelectCommand());
+        cmd.Subcommands.Add(BuildDisableCommand());
+        cmd.Subcommands.Add(BuildEnableCommand());
 
         return cmd;
     }
@@ -30,36 +30,36 @@ internal class CommandFactory : ICommandFactory
     private Command BuildSetupCommand()
     {
         var cmd = new Command("setup", "Get setup string.");
-        cmd.SetHandler(manager.GetSetup);
+        cmd.SetAction(_ => manager.GetSetup());
         return cmd;
     }
 
     private Command BuildPathCommand()
     {
         var cmd = new Command("path", "Get PATH string.");
-        cmd.SetHandler(manager.GetPath);
+        cmd.SetAction(_ => manager.GetPath());
         return cmd;
     }
 
     private Command BuildEnvsCommand()
     {
         var cmd = new Command("envs", "Get environment variables.");
-        cmd.SetHandler(manager.GetEnvs);
+        cmd.SetAction(_ => manager.GetEnvs());
         return cmd;
     }
 
     private Command BuildDiscoverCommand()
     {
         var cmd = new Command("discover", "Discover applications.");
-        cmd.SetHandler(manager.Discover);
+        cmd.SetAction(_ => manager.Discover());
         return cmd;
     }
 
     private Command BuildListCommand()
     {
         var cmd = new Command("list", "List available applications.");
-        cmd.AddAlias("ls");
-        cmd.SetHandler(manager.List);
+        cmd.Aliases.Add("ls");
+        cmd.SetAction(_ => manager.List());
         return cmd;
     }
 
@@ -68,8 +68,8 @@ internal class CommandFactory : ICommandFactory
         var applicationArgument = new Argument<string>("application");
         var versionArgument = new Argument<string>("version") { Arity = ArgumentArity.ZeroOrOne };
         var cmd = new Command("select", "Select application version.") { applicationArgument, versionArgument };
-        cmd.SetHandler(manager.Select, applicationArgument, versionArgument); ;
-        cmd.AddAlias("s");
+        cmd.SetAction(result => manager.Select(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
+        cmd.Aliases.Add("s");
         return cmd;
     }
 
@@ -77,8 +77,8 @@ internal class CommandFactory : ICommandFactory
     {
         var applicationArgument = new Argument<string>("application");
         var cmd = new Command("disable", "Disable application.") { applicationArgument };
-        cmd.AddAlias("d");
-        cmd.SetHandler(application => manager.SetDisabled(application, true), applicationArgument);
+        cmd.Aliases.Add("d");
+        cmd.SetAction(result => manager.SetDisabled(result.GetValue(applicationArgument), true));
 
         return cmd;
     }
@@ -87,8 +87,8 @@ internal class CommandFactory : ICommandFactory
     {
         var applicationArgument = new Argument<string>("application");
         var cmd = new Command("enable", "Enable application.") { applicationArgument };
-        cmd.AddAlias("e");
-        cmd.SetHandler(application => manager.SetDisabled(application, false), applicationArgument);
+        cmd.Aliases.Add("e");
+        cmd.SetAction(result => manager.SetDisabled(result.GetValue(applicationArgument), false));
         return cmd;
     }
 }
