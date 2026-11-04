@@ -6,7 +6,8 @@
         void GetPath();
         void GetEnvs();
         void Discover();
-        void List();
+        void Prune();
+        void List(bool all);
         void Select(string application, string version);
         void SetDisabled(string application, bool isDisabled);
     }

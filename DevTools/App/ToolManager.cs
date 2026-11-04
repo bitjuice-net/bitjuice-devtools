@@ -61,15 +61,49 @@ namespace DevTools.App
             toolDefinitionProvider.Discover(PathUtils.GetRootedPath(settings.RootPath));
         }
 
-        public void List()
+        public void Prune()
         {
-            var table = new ConsoleTable("Name", "Version", "Available", "Disabled");
+            Discover();
 
-            foreach (var name in toolDefinitionProvider.GetNames())
+            var pruned = 0;
+
+            foreach (var application in toolSettingsProvider.GetApplications())
             {
-                var versions = toolDefinitionProvider.GetVersions(name).Select(i => i.Manifest.Version).Join(", ");
+                var versions = toolDefinitionProvider.GetVersions(application);
+
+                if (!versions.Any())
+                {
+                    toolSettingsProvider.RemoveSettings(application);
+                    Console.WriteLine($"Removed settings of {application}: application not found");
+                    pruned++;
+                    continue;
+                }
+
+                var selected = toolSettingsProvider.GetSettings(application).Version;
+                if (selected == null || versions.Any(i => i.Manifest.Version == selected))
+                    continue;
+
+                toolSettingsProvider.UpdateSettings(application, s => s.Version = null);
+                Console.WriteLine($"Cleared selected version of {application}: {selected} not found");
+                pruned++;
+            }
+
+            Console.WriteLine($"Pruned {pruned} stale setting(s)");
+        }
+
+        public void List(bool all)
+        {
+            var table = new ConsoleTable("Name", "Version", "Available", "Status");
+
+            var names = toolDefinitionProvider.GetNames();
+            if (all)
+                names = names.Union(toolSettingsProvider.GetApplications()).OrderBy(i => i).ToList();
+
+            foreach (var name in names)
+            {
+                var versions = toolDefinitionProvider.GetVersions(name).Select(i => i.Manifest.Version).ToList();
                 var toolSettings = toolSettingsProvider.GetSettings(name);
-                table.AddRow(name, toolSettings.Version ?? NotSetConst, versions, toolSettings.IsDisabled);
+                table.AddRow(name, toolSettings.Version ?? NotSetConst, versions.Join(", "), GetStatus(toolSettings, versions));
             }
 
             Console.WriteLine("List of applications:");
@@ -114,6 +148,14 @@ namespace DevTools.App
         public void SetDisabled(string application, bool isDisabled)
         {
             toolSettingsProvider.UpdateSettings(application, s => s.IsDisabled = isDisabled);
+        }
+
+        private static string GetStatus(ToolSettings toolSettings, List<string> versions)
+        {
+            if (!versions.Any() || (toolSettings.Version != null && !versions.Contains(toolSettings.Version)))
+                return "Orphaned";
+
+            return toolSettings.IsDisabled ? "Disabled" : "Enabled";
         }
 
         private IEnumerable<ToolDefinition> GetTools()

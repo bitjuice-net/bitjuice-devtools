@@ -16,6 +16,7 @@ internal class CommandFactory : ICommandFactory
         var cmd = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
 
         cmd.Subcommands.Add(BuildDiscoverCommand());
+        cmd.Subcommands.Add(BuildPruneCommand());
         cmd.Subcommands.Add(BuildSetupCommand());
         cmd.Subcommands.Add(BuildPathCommand());
         cmd.Subcommands.Add(BuildEnvsCommand());
@@ -55,11 +56,19 @@ internal class CommandFactory : ICommandFactory
         return cmd;
     }
 
+    private Command BuildPruneCommand()
+    {
+        var cmd = new Command("prune", "Refresh the application cache and remove settings of applications and versions that no longer exist.");
+        cmd.SetAction(_ => manager.Prune());
+        return cmd;
+    }
+
     private Command BuildListCommand()
     {
-        var cmd = new Command("list", "List available applications.");
+        var allOption = new Option<bool>("--all", "-a") { Description = "Include orphaned settings of applications that no longer exist." };
+        var cmd = new Command("list", "List available applications.") { allOption };
         cmd.Aliases.Add("ls");
-        cmd.SetAction(_ => manager.List());
+        cmd.SetAction(result => manager.List(result.GetValue(allOption)));
         return cmd;
     }
 

@@ -42,5 +42,16 @@ namespace DevTools.App
             action(settings);
             storage.Save(FileName, Applications);
         }
+
+        public List<string> GetApplications()
+        {
+            return Applications.Keys.ToList();
+        }
+
+        public void RemoveSettings(string application)
+        {
+            if (Applications.Remove(application))
+                storage.Save(FileName, Applications);
+        }
     }
 }
