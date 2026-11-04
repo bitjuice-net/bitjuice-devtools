@@ -7,7 +7,15 @@ namespace DevTools.App
 {
     public class ToolDefinitionProvider : IToolDefinitionProvider
     {
+        private const string ManifestFileName = ".app";
+
         private static readonly string FileName = PathUtils.GetRootedPath("cache.json");
+
+        private static readonly EnumerationOptions ScanOptions = new()
+        {
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            IgnoreInaccessible = true
+        };
 
         private readonly IStorage storage;
 
@@ -56,25 +64,75 @@ namespace DevTools.App
             if(!directory.Exists)
                 throw new ArgumentException($"Directory do not exists `{root}`", nameof(root));
 
-            var apps = directory
-                .EnumerateFiles(".app", SearchOption.AllDirectories)
-                .Select(fileInfo => new ToolDefinition
-                {
-                    Path = fileInfo.DirectoryName,
-                    Manifest = storage.Load<ToolManifest>(fileInfo.FullName)
-                })
-                .ToList();
+            var apps = Scan(directory).SelectMany(CreateDefinitions).ToList();
 
-            
-
-            foreach (var app in apps)
-            {
-                var dirName = Path.GetFileName(app.Path);
-                app.Manifest.Version = app.Manifest.Version.Replace("%DIRNAME%", dirName);
-            }
+            ThrowOnDuplicateVersions(apps);
 
             tools = apps.GroupBy(i => i.Manifest.Name).ToDictionary(i => i.Key, i => i.ToList());
             storage.Save(FileName, tools);
+        }
+
+        private IEnumerable<(DirectoryInfo Directory, ToolManifest Manifest)> Scan(DirectoryInfo directory)
+        {
+            var manifestPath = Path.Combine(directory.FullName, ManifestFileName);
+            if (File.Exists(manifestPath))
+            {
+                yield return (directory, storage.Load<ToolManifest>(manifestPath));
+                yield break;
+            }
+
+            foreach (var child in directory.EnumerateDirectories("*", ScanOptions))
+            foreach (var app in Scan(child))
+                yield return app;
+        }
+
+        private static IEnumerable<ToolDefinition> CreateDefinitions((DirectoryInfo Directory, ToolManifest Manifest) app)
+        {
+            var (directory, manifest) = app;
+
+            if (string.IsNullOrWhiteSpace(manifest.Name))
+                throw new InvalidOperationException($"Manifest in `{directory.FullName}` has no name");
+
+            if (!manifest.Versioned)
+            {
+                if (string.IsNullOrWhiteSpace(manifest.Version))
+                    throw new InvalidOperationException($"Manifest in `{directory.FullName}` has no version and is not versioned");
+
+                yield return CreateDefinition(directory, manifest, manifest.Version.Replace("%DIRNAME%", directory.Name));
+                yield break;
+            }
+
+            foreach (var child in directory.EnumerateDirectories("*", ScanOptions))
+            {
+                if (Version.TryParse(child.Name, out _))
+                    yield return CreateDefinition(child, manifest, child.Name);
+            }
+        }
+
+        private static ToolDefinition CreateDefinition(DirectoryInfo directory, ToolManifest manifest, string version)
+        {
+            return new ToolDefinition
+            {
+                Path = directory.FullName,
+                Manifest = new ToolManifest
+                {
+                    Name = manifest.Name,
+                    Version = version,
+                    Paths = manifest.Paths,
+                    Envs = manifest.Envs
+                }
+            };
+        }
+
+        private static void ThrowOnDuplicateVersions(IEnumerable<ToolDefinition> apps)
+        {
+            var duplicate = apps
+                .GroupBy(i => (i.Manifest.Name, i.Manifest.Version))
+                .FirstOrDefault(i => i.Count() > 1);
+
+            if (duplicate != null)
+                throw new InvalidOperationException(
+                    $"Version {duplicate.Key.Version} of {duplicate.Key.Name} is defined more than once: {duplicate.Select(i => i.Path).Join(", ")}");
         }
     }
 }

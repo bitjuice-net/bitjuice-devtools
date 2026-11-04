@@ -15,6 +15,9 @@ namespace DevTools.Tests
 
         public T Load<T>(string fileName) where T : new()
         {
+            if (Path.GetFileName(fileName) == ".app")
+                return new JsonStorage().Load<T>(fileName);
+
             return files.TryGetValue(Path.GetFileName(fileName), out var value) ? (T)value : new T();
         }
 

@@ -8,18 +8,26 @@ namespace DevTools
 {
     internal class Program
     {
-        private static void Main(string[] args)
+        private static int Main(string[] args)
         {
             var config = new ConfigurationBuilder()
                 .AddJsonFile("settings.json")
                 .AddJsonFile("settings.local.json", optional: true)
                 .Build();
 
-            BuildApp(config)
-                .GetRequiredService<ICommandFactory>()
-                .CreateRootCommand()
-                .Parse(args)
-                .Invoke();
+            try
+            {
+                return BuildApp(config)
+                    .GetRequiredService<ICommandFactory>()
+                    .CreateRootCommand()
+                    .Parse(args)
+                    .Invoke(new InvocationConfiguration { EnableDefaultExceptionHandler = false });
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"Error: {e.Message}");
+                return 1;
+            }
         }
 
         public static IServiceProvider BuildApp(IConfigurationRoot configuration)
