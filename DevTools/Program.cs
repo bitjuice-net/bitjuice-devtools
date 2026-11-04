@@ -12,6 +12,7 @@ namespace DevTools
         {
             var config = new ConfigurationBuilder()
                 .AddJsonFile("settings.json")
+                .AddJsonFile("settings.local.json", optional: true)
                 .Build();
 
             BuildApp(config)
