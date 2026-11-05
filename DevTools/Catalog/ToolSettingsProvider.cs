@@ -5,21 +5,13 @@ using DevTools.Infrastructure;
 
 namespace DevTools.Catalog;
 
-public class ToolSettingsProvider : IToolSettingsProvider
+public class ToolSettingsProvider(IStorage storage, IToolDefinitionProvider definitionProvider)
+    : IToolSettingsProvider
 {
     private static readonly string FileName = PathUtils.GetRootedPath("tool-settings.json");
 
-    private readonly IStorage storage;
-    private readonly IToolDefinitionProvider definitionProvider;
-
     private Dictionary<string, ToolSettings> applications;
     private Dictionary<string, ToolSettings> Applications => applications ??= storage.Load<Dictionary<string, ToolSettings>>(FileName);
-
-    public ToolSettingsProvider(IStorage storage, IToolDefinitionProvider definitionProvider)
-    {
-        this.storage = storage;
-        this.definitionProvider = definitionProvider;
-    }
 
     public ToolSettings GetSettings(string application)
     {

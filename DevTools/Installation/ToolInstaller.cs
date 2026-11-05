@@ -11,19 +11,9 @@ using DevTools.Infrastructure;
 
 namespace DevTools.Installation;
 
-public class ToolInstaller : IToolInstaller
+public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDownloader downloader)
+    : IToolInstaller
 {
-    private readonly IStorage storage;
-    private readonly IVersionSource versionSource;
-    private readonly IDownloader downloader;
-
-    public ToolInstaller(IStorage storage, IVersionSource versionSource, IDownloader downloader)
-    {
-        this.storage = storage;
-        this.versionSource = versionSource;
-        this.downloader = downloader;
-    }
-
     public Task<List<RemoteVersion>> GetVersionsAsync(string directory)
     {
         return versionSource.GetVersionsAsync(LoadSource(directory).Versions);

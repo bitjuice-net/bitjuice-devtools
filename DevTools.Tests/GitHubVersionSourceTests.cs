@@ -12,16 +12,9 @@ namespace DevTools.Tests;
 
 public class GitHubVersionSourceTests
 {
-    private class FakeHandler : HttpMessageHandler
+    private class FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> respond;
-
         public List<HttpRequestMessage> Requests { get; } = new();
-
-        public FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> respond)
-        {
-            this.respond = respond;
-        }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {

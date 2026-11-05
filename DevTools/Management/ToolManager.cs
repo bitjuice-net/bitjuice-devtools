@@ -9,22 +9,16 @@ using Microsoft.Extensions.Options;
 
 namespace DevTools.Management;
 
-public class ToolManager : IToolManager
+public class ToolManager(
+    IOptions<Settings> settings,
+    IToolDefinitionProvider toolDefinitionProvider,
+    IToolSettingsProvider toolSettingsProvider,
+    IToolInstaller toolInstaller)
+    : IToolManager
 {
     private const string NotSetConst = "<not set>";
 
-    private readonly Settings settings;
-    private readonly IToolDefinitionProvider toolDefinitionProvider;
-    private readonly IToolSettingsProvider toolSettingsProvider;
-    private readonly IToolInstaller toolInstaller;
-
-    public ToolManager(IOptions<Settings> settings, IToolDefinitionProvider toolDefinitionProvider, IToolSettingsProvider toolSettingsProvider, IToolInstaller toolInstaller)
-    {
-        this.toolInstaller = toolInstaller;
-        this.settings = settings.Value;
-        this.toolDefinitionProvider = toolDefinitionProvider;
-        this.toolSettingsProvider = toolSettingsProvider;
-    }
+    private readonly Settings settings = settings.Value;
 
     public void GetSetup()
     {

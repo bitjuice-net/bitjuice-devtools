@@ -7,7 +7,7 @@ using DevTools.Installation;
 
 namespace DevTools.Catalog;
 
-public class ToolDefinitionProvider : IToolDefinitionProvider
+public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 {
     private const string ManifestFileName = ".app";
 
@@ -19,15 +19,8 @@ public class ToolDefinitionProvider : IToolDefinitionProvider
         IgnoreInaccessible = true
     };
 
-    private readonly IStorage storage;
-
     private Dictionary<string, List<ToolDefinition>> tools;
     private Dictionary<string, List<ToolDefinition>> Tools => tools ??= storage.Load<Dictionary<string, List<ToolDefinition>>>(FileName);
-
-    public ToolDefinitionProvider(IStorage storage)
-    {
-        this.storage = storage;
-    }
 
     public List<string> GetNames()
     {

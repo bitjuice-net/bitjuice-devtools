@@ -4,15 +4,8 @@ using System.Threading.Tasks;
 
 namespace DevTools.Installation;
 
-public class HttpDownloader : IDownloader
+public class HttpDownloader(HttpClient client) : IDownloader
 {
-    private readonly HttpClient client;
-
-    public HttpDownloader(HttpClient client)
-    {
-        this.client = client;
-    }
-
     public async Task DownloadAsync(string url, string fileName)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);

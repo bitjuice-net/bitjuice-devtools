@@ -4,15 +4,8 @@ using DevTools.Management;
 
 namespace DevTools.Cli;
 
-internal class CommandFactory : ICommandFactory
+internal class CommandFactory(IToolManager manager) : ICommandFactory
 {
-    public readonly IToolManager manager;
-
-    public CommandFactory(IToolManager manager)
-    {
-        this.manager = manager;
-    }
-
     public RootCommand CreateRootCommand()
     {
         var cmd = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");

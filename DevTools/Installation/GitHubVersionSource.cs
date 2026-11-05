@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace DevTools.Installation;
 
-public class GitHubVersionSource : IVersionSource
+public class GitHubVersionSource(HttpClient client) : IVersionSource
 {
     private const string Releases = "github-releases";
     private const string Tags = "github-tags";
@@ -18,13 +18,6 @@ public class GitHubVersionSource : IVersionSource
     private const int PageSize = 100;
 
     private static readonly Regex RepoPattern = new(@"^[\w.-]+/[\w.-]+$");
-
-    private readonly HttpClient client;
-
-    public GitHubVersionSource(HttpClient client)
-    {
-        this.client = client;
-    }
 
     public async Task<List<RemoteVersion>> GetVersionsAsync(VersionSource source)
     {
