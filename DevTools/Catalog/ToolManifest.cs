@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace DevTools.App
+namespace DevTools.Catalog
 {
     public class ToolManifest
     {

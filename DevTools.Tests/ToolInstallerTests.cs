@@ -7,7 +7,10 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using DevTools.App;
+using DevTools.Catalog;
+using DevTools.Infrastructure;
+using DevTools.Installation;
+using DevTools.Management;
 using Microsoft.Extensions.Options;
 using Xunit;
 

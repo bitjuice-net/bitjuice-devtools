@@ -1,6 +1,6 @@
 ﻿using System.CommandLine;
 
-namespace DevTools.App;
+namespace DevTools.Cli;
 
 public interface ICommandFactory
 {

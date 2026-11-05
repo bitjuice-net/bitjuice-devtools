@@ -1,10 +1,12 @@
 ﻿using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace DevTools.App
+namespace DevTools.Installation
 {
     public class ToolSource
     {
+        public const string FileName = ".source";
+
         public VersionSource Versions { get; set; }
         public List<InstallStep> Steps { get; set; }
     }

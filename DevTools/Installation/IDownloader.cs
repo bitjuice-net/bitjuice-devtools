@@ -1,6 +1,6 @@
 ﻿using System.Threading.Tasks;
 
-namespace DevTools.App
+namespace DevTools.Installation
 {
     public interface IDownloader
     {

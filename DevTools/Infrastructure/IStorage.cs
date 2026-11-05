@@ -1,4 +1,4 @@
-﻿namespace DevTools.App
+﻿namespace DevTools.Infrastructure
 {
     public interface IStorage
     {

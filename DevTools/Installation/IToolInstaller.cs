@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace DevTools.App
+namespace DevTools.Installation
 {
     public interface IToolInstaller
     {

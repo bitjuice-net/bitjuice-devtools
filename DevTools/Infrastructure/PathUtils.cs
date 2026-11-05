@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 
-namespace DevTools.App
+namespace DevTools.Infrastructure
 {
     public class PathUtils
     {

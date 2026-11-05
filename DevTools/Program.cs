@@ -1,7 +1,11 @@
 ﻿using System;
 using System.CommandLine;
 using System.Net.Http;
-using DevTools.App;
+using DevTools.Catalog;
+using DevTools.Cli;
+using DevTools.Infrastructure;
+using DevTools.Installation;
+using DevTools.Management;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DevTools.App
+namespace DevTools.Catalog
 {
     public interface IToolSettingsProvider
     {

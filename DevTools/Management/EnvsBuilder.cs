@@ -1,29 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
+using DevTools.Catalog;
+using DevTools.Infrastructure;
 
-namespace DevTools.App
+namespace DevTools.Management
 {
-    public class PathBuilder
+    public class EnvsBuilder
     {
         private readonly List<string> values = new();
 
         public void AddApplication(ToolDefinition version)
         {
-            if (version == null) 
+            if (version == null)
                 throw new ArgumentNullException(nameof(version));
 
-            if (version.Manifest.Paths == null)
+            if (version.Manifest.Envs == null)
                 return;
 
             Environment.SetEnvironmentVariable("APPDIR", version.Path);
 
-            foreach (var includePath in version.Manifest.Paths) 
-                values.Add(Environment.ExpandEnvironmentVariables(includePath));
+            foreach (var (key, value) in version.Manifest.Envs) 
+                values.Add($"{key}={Environment.ExpandEnvironmentVariables(value)}");
         }
 
         public string Build()
         {
-            return values.Join(';');
+            return values.Join(Environment.NewLine);
         }
     }
 }

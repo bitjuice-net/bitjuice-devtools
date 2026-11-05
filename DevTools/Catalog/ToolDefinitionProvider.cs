@@ -2,8 +2,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DevTools.Infrastructure;
+using DevTools.Installation;
 
-namespace DevTools.App
+namespace DevTools.Catalog
 {
     public class ToolDefinitionProvider : IToolDefinitionProvider
     {
@@ -75,14 +77,14 @@ namespace DevTools.App
         public string FindSourceDirectory(string root, string application)
         {
             var directories = Scan(new DirectoryInfo(root))
-                .Where(i => i.Manifest.Name == application && File.Exists(Path.Combine(i.Directory.FullName, ToolInstaller.SourceFileName)))
+                .Where(i => i.Manifest.Name == application && File.Exists(Path.Combine(i.Directory.FullName, ToolSource.FileName)))
                 .ToList();
 
             if (directories.Count == 0)
-                throw new InvalidOperationException($"No `{ToolInstaller.SourceFileName}` file found for {application}");
+                throw new InvalidOperationException($"No `{ToolSource.FileName}` file found for {application}");
 
             if (directories.Count > 1)
-                throw new InvalidOperationException($"More than one `{ToolInstaller.SourceFileName}` file found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
+                throw new InvalidOperationException($"More than one `{ToolSource.FileName}` file found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
 
             var (directory, manifest) = directories[0];
             if (!manifest.Versioned)

@@ -2,7 +2,7 @@
 using System.Net.Http;
 using System.Threading.Tasks;
 
-namespace DevTools.App
+namespace DevTools.Installation
 {
     public class HttpDownloader : IDownloader
     {

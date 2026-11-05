@@ -2,9 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using ConsoleTables;
+using DevTools.Catalog;
+using DevTools.Infrastructure;
+using DevTools.Installation;
 using Microsoft.Extensions.Options;
 
-namespace DevTools.App
+namespace DevTools.Management
 {
     public class ToolManager : IToolManager
     {

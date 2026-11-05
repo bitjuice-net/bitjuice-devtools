@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using DevTools.App;
+using DevTools.Catalog;
+using DevTools.Infrastructure;
+using DevTools.Management;
 using Microsoft.Extensions.Options;
 using Xunit;
 

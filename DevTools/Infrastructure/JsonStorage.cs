@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using System.Text.Json;
 
-namespace DevTools.App
+namespace DevTools.Infrastructure
 {
     public class JsonStorage : IStorage
     {

@@ -7,13 +7,12 @@ using System.Linq;
 using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using DevTools.Infrastructure;
 
-namespace DevTools.App
+namespace DevTools.Installation
 {
     public class ToolInstaller : IToolInstaller
     {
-        public const string SourceFileName = ".source";
-
         private readonly IStorage storage;
         private readonly IVersionSource versionSource;
         private readonly IDownloader downloader;
@@ -114,7 +113,7 @@ namespace DevTools.App
 
         private ToolSource LoadSource(string directory)
         {
-            var fileName = Path.Combine(directory, SourceFileName);
+            var fileName = Path.Combine(directory, ToolSource.FileName);
             var source = storage.Load<ToolSource>(fileName);
 
             if (source.Versions == null)

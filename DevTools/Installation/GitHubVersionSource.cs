@@ -8,7 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace DevTools.App
+namespace DevTools.Installation
 {
     public class GitHubVersionSource : IVersionSource
     {

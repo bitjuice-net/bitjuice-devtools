@@ -2,7 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using DevTools.App;
+using DevTools.Catalog;
+using DevTools.Infrastructure;
 using Xunit;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]

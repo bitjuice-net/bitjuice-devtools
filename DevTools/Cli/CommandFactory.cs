@@ -1,6 +1,8 @@
 ﻿using System.CommandLine;
+using DevTools.Catalog;
+using DevTools.Management;
 
-namespace DevTools.App;
+namespace DevTools.Cli;
 
 internal class CommandFactory : ICommandFactory
 {
