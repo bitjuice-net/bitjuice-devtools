@@ -1,17 +1,16 @@
-﻿namespace DevTools.Management
+﻿namespace DevTools.Management;
+
+public interface IToolManager
 {
-    public interface IToolManager
-    {
-        void GetSetup();
-        void GetPath();
-        void GetEnvs();
-        void Discover();
-        void Prune();
-        void Install(string application, string version);
-        void Update(string application);
-        void Remove(string application, string version);
-        void List(bool all);
-        void Select(string application, string version);
-        void SetDisabled(string application, bool isDisabled);
-    }
+    void GetSetup();
+    void GetPath();
+    void GetEnvs();
+    void Discover();
+    void Prune();
+    void Install(string application, string version);
+    void Update(string application);
+    void Remove(string application, string version);
+    void List(bool all);
+    void Select(string application, string version);
+    void SetDisabled(string application, bool isDisabled);
 }

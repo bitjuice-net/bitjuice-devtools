@@ -3,29 +3,28 @@ using System.Collections.Generic;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
 
-namespace DevTools.Management
+namespace DevTools.Management;
+
+public class EnvsBuilder
 {
-    public class EnvsBuilder
+    private readonly List<string> values = new();
+
+    public void AddApplication(ToolDefinition version)
     {
-        private readonly List<string> values = new();
+        if (version == null)
+            throw new ArgumentNullException(nameof(version));
 
-        public void AddApplication(ToolDefinition version)
-        {
-            if (version == null)
-                throw new ArgumentNullException(nameof(version));
+        if (version.Manifest.Envs == null)
+            return;
 
-            if (version.Manifest.Envs == null)
-                return;
+        Environment.SetEnvironmentVariable("APPDIR", version.Path);
 
-            Environment.SetEnvironmentVariable("APPDIR", version.Path);
+        foreach (var (key, value) in version.Manifest.Envs) 
+            values.Add($"{key}={Environment.ExpandEnvironmentVariables(value)}");
+    }
 
-            foreach (var (key, value) in version.Manifest.Envs) 
-                values.Add($"{key}={Environment.ExpandEnvironmentVariables(value)}");
-        }
-
-        public string Build()
-        {
-            return values.Join(Environment.NewLine);
-        }
+    public string Build()
+    {
+        return values.Join(Environment.NewLine);
     }
 }

@@ -1,10 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace DevTools.Installation
+namespace DevTools.Installation;
+
+public interface IVersionSource
 {
-    public interface IVersionSource
-    {
-        Task<List<RemoteVersion>> GetVersionsAsync(VersionSource source);
-    }
+    Task<List<RemoteVersion>> GetVersionsAsync(VersionSource source);
 }

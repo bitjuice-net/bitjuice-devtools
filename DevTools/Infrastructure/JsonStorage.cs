@@ -1,26 +1,25 @@
 ﻿using System.IO;
 using System.Text.Json;
 
-namespace DevTools.Infrastructure
+namespace DevTools.Infrastructure;
+
+public class JsonStorage : IStorage
 {
-    public class JsonStorage : IStorage
+    private static readonly JsonSerializerOptions Options = new()
     {
-        private static readonly JsonSerializerOptions Options = new()
-        {
-            AllowOutOfOrderMetadataProperties = true,
-            PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
-        };
+        AllowOutOfOrderMetadataProperties = true,
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
 
-        public T Load<T>(string fileName) where T : new()
-        {
-            return File.Exists(fileName) ? JsonSerializer.Deserialize<T>(File.ReadAllText(fileName), Options) : new T();
-        }
+    public T Load<T>(string fileName) where T : new()
+    {
+        return File.Exists(fileName) ? JsonSerializer.Deserialize<T>(File.ReadAllText(fileName), Options) : new T();
+    }
 
-        public void Save<T>(string fileName, T obj) where T : new()
-        {
-            File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));
-        }
+    public void Save<T>(string fileName, T obj) where T : new()
+    {
+        File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));
     }
 }

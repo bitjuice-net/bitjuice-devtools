@@ -1,13 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DevTools.Catalog
+namespace DevTools.Catalog;
+
+public interface IToolSettingsProvider
 {
-    public interface IToolSettingsProvider
-    {
-        ToolSettings GetSettings(string application);
-        void UpdateSettings(string application, Action<ToolSettings> action);
-        List<string> GetApplications();
-        void RemoveSettings(string application);
-    }
+    ToolSettings GetSettings(string application);
+    void UpdateSettings(string application, Action<ToolSettings> action);
+    List<string> GetApplications();
+    void RemoveSettings(string application);
 }

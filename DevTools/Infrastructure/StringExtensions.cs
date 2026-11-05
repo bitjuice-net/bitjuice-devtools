@@ -1,17 +1,16 @@
 ﻿using System.Collections.Generic;
 
-namespace DevTools.Infrastructure
-{
-    public static class StringExtensions
-    {
-        public static string Join(this IEnumerable<string> strings, char separator)
-        {
-            return string.Join(separator, strings);
-        }
+namespace DevTools.Infrastructure;
 
-        public static string Join(this IEnumerable<string> strings, string separator)
-        {
-            return string.Join(separator, strings);
-        }
+public static class StringExtensions
+{
+    public static string Join(this IEnumerable<string> strings, char separator)
+    {
+        return string.Join(separator, strings);
+    }
+
+    public static string Join(this IEnumerable<string> strings, string separator)
+    {
+        return string.Join(separator, strings);
     }
 }

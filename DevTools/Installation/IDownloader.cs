@@ -1,9 +1,8 @@
 ﻿using System.Threading.Tasks;
 
-namespace DevTools.Installation
+namespace DevTools.Installation;
+
+public interface IDownloader
 {
-    public interface IDownloader
-    {
-        Task DownloadAsync(string url, string fileName);
-    }
+    Task DownloadAsync(string url, string fileName);
 }

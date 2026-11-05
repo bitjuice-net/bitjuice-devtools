@@ -1,8 +1,7 @@
-﻿namespace DevTools.Catalog
+﻿namespace DevTools.Catalog;
+
+public class ToolDefinition
 {
-    public class ToolDefinition
-    {
-        public string Path { get; set; }
-        public ToolManifest Manifest { get; set; }
-    }
+    public string Path { get; set; }
+    public ToolManifest Manifest { get; set; }
 }

@@ -1,7 +1,6 @@
-﻿namespace DevTools.Infrastructure
+﻿namespace DevTools.Infrastructure;
+
+public class Settings
 {
-    public class Settings
-    {
-        public string RootPath { get; set; }
-    }
+    public string RootPath { get; set; }
 }

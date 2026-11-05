@@ -2,17 +2,16 @@
 using System.Diagnostics;
 using System.IO;
 
-namespace DevTools.Infrastructure
-{
-    public class PathUtils
-    {
-        public static string AssemblyDirectory => Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty);
+namespace DevTools.Infrastructure;
 
-        public static string GetRootedPath(string path)
-        {
-            if (path is null)
-                throw new ArgumentNullException(nameof(path));
-            return Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(AssemblyDirectory, path));
-        }
+public class PathUtils
+{
+    public static string AssemblyDirectory => Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty);
+
+    public static string GetRootedPath(string path)
+    {
+        if (path is null)
+            throw new ArgumentNullException(nameof(path));
+        return Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(AssemblyDirectory, path));
     }
 }
