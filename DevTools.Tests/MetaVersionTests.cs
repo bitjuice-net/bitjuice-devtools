@@ -17,7 +17,7 @@ namespace DevTools.Tests
         {
             definitions = new ToolDefinitionProvider(storage);
             settings = new ToolSettingsProvider(storage, definitions);
-            manager = new ToolManager(Options.Create(new Settings()), definitions, settings);
+            manager = new ToolManager(Options.Create(new Settings()), definitions, settings, null);
         }
 
         [Theory]

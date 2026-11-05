@@ -17,6 +17,8 @@ internal class CommandFactory : ICommandFactory
 
         cmd.Subcommands.Add(BuildDiscoverCommand());
         cmd.Subcommands.Add(BuildPruneCommand());
+        cmd.Subcommands.Add(BuildInstallCommand());
+        cmd.Subcommands.Add(BuildUpdateCommand());
         cmd.Subcommands.Add(BuildSetupCommand());
         cmd.Subcommands.Add(BuildPathCommand());
         cmd.Subcommands.Add(BuildEnvsCommand());
@@ -60,6 +62,28 @@ internal class CommandFactory : ICommandFactory
     {
         var cmd = new Command("prune", "Refresh the application cache and remove settings of applications and versions that no longer exist.");
         cmd.SetAction(_ => manager.Prune());
+        return cmd;
+    }
+
+    private Command BuildInstallCommand()
+    {
+        var applicationArgument = new Argument<string>("application");
+        var versionArgument = new Argument<string>("version")
+        {
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = "Version to install or latest.",
+            DefaultValueFactory = _ => MetaVersion.Latest
+        };
+        var cmd = new Command("install", "Download and install application version.") { applicationArgument, versionArgument };
+        cmd.SetAction(result => manager.Install(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
+        return cmd;
+    }
+
+    private Command BuildUpdateCommand()
+    {
+        var applicationArgument = new Argument<string>("application");
+        var cmd = new Command("update", "Install the newest version if it is newer than the installed ones.") { applicationArgument };
+        cmd.SetAction(result => manager.Update(result.GetValue(applicationArgument)));
         return cmd;
     }
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.CommandLine;
+using System.Net.Http;
 using DevTools.App;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,6 +42,10 @@ namespace DevTools
             services.AddSingleton<IToolManager, ToolManager>();
             services.AddSingleton<IToolDefinitionProvider, ToolDefinitionProvider>();
             services.AddSingleton<IToolSettingsProvider, ToolSettingsProvider>();
+            services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromMinutes(30) });
+            services.AddSingleton<IVersionSource, GitHubVersionSource>();
+            services.AddSingleton<IDownloader, HttpDownloader>();
+            services.AddSingleton<IToolInstaller, ToolInstaller>();
 
             return services.BuildServiceProvider();
         }

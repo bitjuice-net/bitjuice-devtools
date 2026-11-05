@@ -72,6 +72,25 @@ namespace DevTools.App
             storage.Save(FileName, tools);
         }
 
+        public string FindSourceDirectory(string root, string application)
+        {
+            var directories = Scan(new DirectoryInfo(root))
+                .Where(i => i.Manifest.Name == application && File.Exists(Path.Combine(i.Directory.FullName, ToolInstaller.SourceFileName)))
+                .ToList();
+
+            if (directories.Count == 0)
+                throw new InvalidOperationException($"No `{ToolInstaller.SourceFileName}` file found for {application}");
+
+            if (directories.Count > 1)
+                throw new InvalidOperationException($"More than one `{ToolInstaller.SourceFileName}` file found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
+
+            var (directory, manifest) = directories[0];
+            if (!manifest.Versioned)
+                throw new InvalidOperationException($"{application} in `{directory.FullName}` needs \"versioned\": true to install versions");
+
+            return directory.FullName;
+        }
+
         private IEnumerable<(DirectoryInfo Directory, ToolManifest Manifest)> Scan(DirectoryInfo directory)
         {
             var manifestPath = Path.Combine(directory.FullName, ManifestFileName);

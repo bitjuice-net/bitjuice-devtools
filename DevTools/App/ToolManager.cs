@@ -13,9 +13,11 @@ namespace DevTools.App
         private readonly Settings settings;
         private readonly IToolDefinitionProvider toolDefinitionProvider;
         private readonly IToolSettingsProvider toolSettingsProvider;
+        private readonly IToolInstaller toolInstaller;
 
-        public ToolManager(IOptions<Settings> settings, IToolDefinitionProvider toolDefinitionProvider, IToolSettingsProvider toolSettingsProvider)
+        public ToolManager(IOptions<Settings> settings, IToolDefinitionProvider toolDefinitionProvider, IToolSettingsProvider toolSettingsProvider, IToolInstaller toolInstaller)
         {
+            this.toolInstaller = toolInstaller;
             this.settings = settings.Value;
             this.toolDefinitionProvider = toolDefinitionProvider;
             this.toolSettingsProvider = toolSettingsProvider;
@@ -91,9 +93,66 @@ namespace DevTools.App
             Console.WriteLine($"Pruned {pruned} stale setting(s)");
         }
 
+        public void Install(string application, string version)
+        {
+            Discover();
+
+            var directory = toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
+            var available = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult();
+
+            var target = version == MetaVersion.Latest
+                ? available.FirstOrDefault()
+                : available.FirstOrDefault(i => i.Version == version);
+
+            if (target == null)
+                throw new InvalidOperationException($"Version {version} of {application} not found");
+
+            if (toolDefinitionProvider.GetVersions(application).Any(i => i.Manifest.Version == target.Version))
+            {
+                Console.WriteLine($"{application} {target.Version} is already installed");
+                return;
+            }
+
+            InstallVersion(application, directory, target);
+        }
+
+        public void Update(string application)
+        {
+            Discover();
+
+            var directory = toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
+            var newest = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult().FirstOrDefault();
+
+            if (newest == null)
+                throw new InvalidOperationException($"No versions of {application} found");
+
+            var installed = toolDefinitionProvider.GetVersion(application, MetaVersion.Latest);
+
+            if (installed != null && Version.TryParse(installed.Manifest.Version, out var current) && Version.Parse(newest.Version) <= current)
+            {
+                Console.WriteLine($"{application} is up to date, the newest installed version is {installed.Manifest.Version} and the newest available is {newest.Version}");
+                return;
+            }
+
+            InstallVersion(application, directory, newest);
+        }
+
+        private void InstallVersion(string application, string directory, RemoteVersion target)
+        {
+            var path = toolInstaller.InstallAsync(directory, target).GetAwaiter().GetResult();
+            Discover();
+
+            Console.WriteLine($"Installed {application} {target.Version} in {path}");
+
+            var selected = toolSettingsProvider.GetSettings(application).Version;
+            Console.WriteLine(toolDefinitionProvider.GetVersion(application, selected)?.Manifest.Version == target.Version
+                ? $"{application} now uses {target.Version}"
+                : $"{application} still uses {FormatVersion(application, selected)}, use `select {application} {target.Version}` to switch");
+        }
+
         public void List(bool all)
         {
-            var table = new ConsoleTable("Name", "Version", "Available", "Status");
+            var table = new ConsoleTable("Name", "Version", "Installed", "Status");
 
             var names = toolDefinitionProvider.GetNames();
             if (all)

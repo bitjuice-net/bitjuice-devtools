@@ -8,5 +8,6 @@ namespace DevTools.App
         List<ToolDefinition> GetVersions(string application);
         ToolDefinition GetVersion(string application, string version);
         void Discover(string root);
+        string FindSourceDirectory(string root, string application);
     }
 }

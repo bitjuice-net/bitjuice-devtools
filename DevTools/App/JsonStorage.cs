@@ -7,6 +7,7 @@ namespace DevTools.App
     {
         private static readonly JsonSerializerOptions Options = new()
         {
+            AllowOutOfOrderMetadataProperties = true,
             PropertyNameCaseInsensitive = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true

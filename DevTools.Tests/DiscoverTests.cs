@@ -132,7 +132,7 @@ namespace DevTools.Tests
             Manifest("java", """{ "name": "java", "versioned": true }""");
             Dirs(@"java\11.0.1");
             var settings = new ToolSettingsProvider(storage, definitions);
-            var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings);
+            var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, null);
             definitions.Discover(root);
             settings.UpdateSettings("java", s => s.Version = "latest");
             settings.UpdateSettings("ghost", s => s.Version = "1.0.0");
