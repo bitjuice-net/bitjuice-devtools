@@ -212,7 +212,7 @@ namespace DevTools.Tests
         public void Install_UnversionedApplicationThrows()
         {
             Source("""[ { "type": "download", "asset": "a" } ]""");
-            File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app", "version": "default" }""");
+            File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app" }""");
 
             var error = Assert.Throws<InvalidOperationException>(() => Install());
 
@@ -396,6 +396,157 @@ namespace DevTools.Tests
             Update();
 
             Assert.Equal("1.0.0", settings.GetSettings("app").Version);
+        }
+
+        private void Remove(string version)
+        {
+            TestTools.CaptureConsole(() => manager.Remove("app", version));
+        }
+
+        private string InstalledFile(string version)
+        {
+            var file = Installed(version, "bin", "a.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(file));
+            File.WriteAllText(file, version);
+            return file;
+        }
+
+        [Fact]
+        public void Remove_DeletesVersionAndKeepsTheRest()
+        {
+            InstalledFile("1.0.0");
+            InstalledFile("2.0.0");
+            Source("""[ { "type": "download", "asset": "a" } ]""");
+
+            Remove("1.0.0");
+
+            Assert.False(Directory.Exists(Installed("1.0.0")));
+            Assert.True(Directory.Exists(Installed("2.0.0")));
+            Assert.True(File.Exists(Path.Combine(appDir, ".app")));
+            Assert.True(File.Exists(Path.Combine(appDir, ".source")));
+            Assert.Equal(new[] { "2.0.0" }, definitions.GetVersions("app").Select(i => i.Manifest.Version));
+            Assert.Empty(Directory.GetDirectories(appDir, ".remove-*"));
+        }
+
+        [Fact]
+        public void Remove_LatestSelectionFollowsToPreviousVersion()
+        {
+            InstalledFile("1.0.0");
+            InstalledFile("2.0.0");
+            definitions.Discover(root);
+            settings.UpdateSettings("app", s => s.Version = "latest");
+
+            Remove("2.0.0");
+
+            Assert.Equal("latest", settings.GetSettings("app").Version);
+            Assert.Equal("1.0.0", definitions.GetVersion("app", "latest").Manifest.Version);
+        }
+
+        [Fact]
+        public void Remove_LastVersionKeepsApplicationDirectory()
+        {
+            InstalledFile("1.0.0");
+
+            Remove("1.0.0");
+
+            Assert.False(Directory.Exists(Installed("1.0.0")));
+            Assert.True(File.Exists(Path.Combine(appDir, ".app")));
+            Assert.Empty(definitions.GetVersions("app"));
+        }
+
+        [Fact]
+        public void Remove_SelectedVersionIsRefused()
+        {
+            var file = InstalledFile("1.0.0");
+            InstalledFile("2.0.0");
+            definitions.Discover(root);
+            settings.UpdateSettings("app", s => s.Version = "1.0.0");
+
+            var error = Assert.Throws<InvalidOperationException>(() => Remove("1.0.0"));
+
+            Assert.Contains("is selected", error.Message);
+            Assert.True(File.Exists(file));
+        }
+
+        [Theory]
+        [InlineData("latest")]
+        [InlineData("oldest")]
+        [InlineData("3.0.0")]
+        [InlineData("..")]
+        public void Remove_OnlyExactInstalledVersionIsAccepted(string version)
+        {
+            var file = InstalledFile("1.0.0");
+
+            var error = Assert.Throws<InvalidOperationException>(() => Remove(version));
+
+            Assert.Contains("not found", error.Message);
+            Assert.True(File.Exists(file));
+        }
+
+        [Fact]
+        public void Remove_NotVersionedApplicationIsRefused()
+        {
+            var directory = Path.Combine(root, "single");
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, ".app"), """{ "name": "single" }""");
+
+            var error = Assert.Throws<InvalidOperationException>(() => manager.Remove("single", "default"));
+
+            Assert.Contains("not versioned", error.Message);
+            Assert.True(File.Exists(Path.Combine(directory, ".app")));
+        }
+
+        [Fact]
+        public void Remove_DeletesReadOnlyFiles()
+        {
+            var file = InstalledFile("1.0.0");
+            File.SetAttributes(file, FileAttributes.ReadOnly);
+
+            Remove("1.0.0");
+
+            Assert.False(Directory.Exists(Installed("1.0.0")));
+        }
+
+        [Fact]
+        public void Remove_VersionInUseStaysComplete()
+        {
+            var file = InstalledFile("1.0.0");
+            var other = Path.Combine(Path.GetDirectoryName(file), "b.txt");
+            File.WriteAllText(other, "b");
+
+            using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => Remove("1.0.0"));
+                Assert.Contains("nothing was deleted", error.Message);
+            }
+
+            Assert.True(File.Exists(file));
+            Assert.True(File.Exists(other));
+            Assert.Empty(Directory.GetDirectories(appDir, ".remove-*"));
+        }
+
+        [Fact]
+        public void Remove_DoesNotFollowJunctions()
+        {
+            var outside = Directory.CreateTempSubdirectory("devtools-tests-outside-").FullName;
+            try
+            {
+                var kept = Path.Combine(outside, "kept.txt");
+                File.WriteAllText(kept, "kept");
+                InstalledFile("1.0.0");
+                using (var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd", $"/c mklink /J \"{Installed("1.0.0", "link")}\" \"{outside}\"") { RedirectStandardOutput = true }))
+                    mklink.WaitForExit();
+                Assert.True(File.Exists(Installed("1.0.0", "link", "kept.txt")));
+
+                Remove("1.0.0");
+
+                Assert.False(Directory.Exists(Installed("1.0.0")));
+                Assert.True(File.Exists(kept));
+            }
+            finally
+            {
+                Directory.Delete(outside, true);
+            }
         }
 
         [Fact]

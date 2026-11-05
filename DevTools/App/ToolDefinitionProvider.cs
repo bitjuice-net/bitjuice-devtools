@@ -112,12 +112,12 @@ namespace DevTools.App
             if (string.IsNullOrWhiteSpace(manifest.Name))
                 throw new InvalidOperationException($"Manifest in `{directory.FullName}` has no name");
 
+            if (manifest.Version != null)
+                throw new InvalidOperationException($"Manifest in `{directory.FullName}` has a version, remove it. Versions come from subdirectories of a manifest with \"versioned\": true");
+
             if (!manifest.Versioned)
             {
-                if (string.IsNullOrWhiteSpace(manifest.Version))
-                    throw new InvalidOperationException($"Manifest in `{directory.FullName}` has no version and is not versioned");
-
-                yield return CreateDefinition(directory, manifest, manifest.Version.Replace("%DIRNAME%", directory.Name));
+                yield return CreateDefinition(directory, manifest, MetaVersion.Default);
                 yield break;
             }
 
@@ -137,6 +137,7 @@ namespace DevTools.App
                 {
                     Name = manifest.Name,
                     Version = version,
+                    Versioned = manifest.Versioned,
                     Paths = manifest.Paths,
                     Envs = manifest.Envs
                 }

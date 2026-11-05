@@ -68,6 +68,50 @@ namespace DevTools.App
             }
         }
 
+        public void Remove(string versionDirectory)
+        {
+            var work = Path.Combine(Path.GetDirectoryName(versionDirectory), $".remove-{Path.GetFileName(versionDirectory)}-{Guid.NewGuid():N}");
+
+            // Moving fails while any file is in use, so a running tool stays complete instead of being half deleted.
+            try
+            {
+                Directory.Move(versionDirectory, work);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new InvalidOperationException($"Cannot remove `{versionDirectory}`, nothing was deleted. Is it in use? {e.Message}", e);
+            }
+
+            try
+            {
+                DeleteTree(new DirectoryInfo(work));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new InvalidOperationException($"Version is no longer available, but `{work}` could not be fully deleted: {e.Message}", e);
+            }
+        }
+
+        // Directory.Delete(path, true) needs extra privileges to unmount junctions, and a link must go without touching its target.
+        private static void DeleteTree(DirectoryInfo directory)
+        {
+            foreach (var entry in directory.EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = 0 }))
+            {
+                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    entry.Delete();
+                else if (entry is DirectoryInfo child)
+                    DeleteTree(child);
+                else
+                {
+                    entry.Attributes &= ~FileAttributes.ReadOnly;
+                    entry.Delete();
+                }
+            }
+
+            directory.Attributes &= ~FileAttributes.ReadOnly;
+            directory.Delete();
+        }
+
         private ToolSource LoadSource(string directory)
         {
             var fileName = Path.Combine(directory, SourceFileName);

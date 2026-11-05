@@ -137,6 +137,32 @@ namespace DevTools.App
             InstallVersion(application, directory, newest);
         }
 
+        public void Remove(string application, string version)
+        {
+            Discover();
+
+            var definition = toolDefinitionProvider.GetVersions(application).SingleOrDefault(i => i.Manifest.Version == version);
+
+            if (definition == null)
+                throw new InvalidOperationException($"Version {version} of {application} not found");
+
+            if (!definition.Manifest.Versioned)
+                throw new InvalidOperationException($"{application} in `{definition.Path}` is not versioned, only versions of versioned applications can be removed");
+
+            var selected = toolSettingsProvider.GetSettings(application).Version;
+
+            if (selected == version)
+                throw new InvalidOperationException($"{application} {version} is selected, use `select {application}` to switch to another version first");
+
+            toolInstaller.Remove(definition.Path);
+            Discover();
+
+            Console.WriteLine($"Removed {application} {version} from {definition.Path}");
+            Console.WriteLine(toolDefinitionProvider.GetVersions(application).Any()
+                ? $"{application} uses {FormatVersion(application, selected)}"
+                : $"{application} has no installed versions left");
+        }
+
         private void InstallVersion(string application, string directory, RemoteVersion target)
         {
             var path = toolInstaller.InstallAsync(directory, target).GetAwaiter().GetResult();
@@ -152,7 +178,7 @@ namespace DevTools.App
 
         public void List(bool all)
         {
-            var table = new ConsoleTable("Name", "Version", "Installed", "Status");
+            var table = new ConsoleTable("Name", "Selected", "Installed", "Status");
 
             var names = toolDefinitionProvider.GetNames();
             if (all)
@@ -173,6 +199,12 @@ namespace DevTools.App
 
         public void Select(string application, string version)
         {
+            if (IsNotVersioned(application))
+            {
+                Console.WriteLine($"{application} is not versioned, there is no version to select");
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(version))
             {
                 var versions = toolDefinitionProvider.GetVersions(application).ToList();
@@ -221,7 +253,17 @@ namespace DevTools.App
                 return version;
 
             var resolved = toolDefinitionProvider.GetVersion(application, version);
+
+            if (resolved?.Manifest.Version == MetaVersion.Default)
+                return MetaVersion.Default;
+
             return resolved == null || resolved.Manifest.Version == version ? version : $"{version} ({resolved.Manifest.Version})";
+        }
+
+        private bool IsNotVersioned(string application)
+        {
+            var versions = toolDefinitionProvider.GetVersions(application);
+            return versions.Count == 1 && versions[0].Manifest.Version == MetaVersion.Default;
         }
 
         private string GetStatus(string application, ToolSettings toolSettings)

@@ -95,7 +95,7 @@ namespace DevTools.Tests
         [Fact]
         public void Unversioned_DoesNotTreatSubdirectoriesAsVersions()
         {
-            Manifest("android-sdk", """{ "name": "android-sdk", "version": "default" }""");
+            Manifest("android-sdk", """{ "name": "android-sdk" }""");
             Dirs(@"android-sdk\34.0.0", @"android-sdk\platform-tools");
 
             definitions.Discover(root);
@@ -104,19 +104,82 @@ namespace DevTools.Tests
         }
 
         [Fact]
-        public void LegacyFormat_StillWorks()
+        public void Unversioned_ThrowsOnTwoDirectoriesWithTheSameName()
         {
-            Manifest(@"node\8.9.3", """{ "name": "node", "version": "%DIRNAME%" }""");
-            Manifest(@"node\24.11.1", """{ "name": "node", "version": "%DIRNAME%" }""");
+            Manifest("a", """{ "name": "x" }""");
+            Manifest("b", """{ "name": "x" }""");
 
+            var error = Assert.Throws<InvalidOperationException>(() => definitions.Discover(root));
+
+            Assert.Contains(Path.Combine(root, "a"), error.Message);
+            Assert.Contains(Path.Combine(root, "b"), error.Message);
+        }
+
+        [Theory]
+        [InlineData("""{ "name": "x", "version": "default" }""")]
+        [InlineData("""{ "name": "x", "version": "%DIRNAME%" }""")]
+        [InlineData("""{ "name": "x", "version": "1.0.0", "versioned": true }""")]
+        public void VersionInManifest_ThrowsAndKeepsCache(string content)
+        {
+            Manifest("good", """{ "name": "good" }""");
             definitions.Discover(root);
+            Manifest("x", content);
 
-            Assert.Equal(new[] { "8.9.3", "24.11.1" }, Versions("node"));
+            var error = Assert.Throws<InvalidOperationException>(() => definitions.Discover(root));
+
+            Assert.Contains(Path.Combine(root, "x"), error.Message);
+            Assert.Contains("remove it", error.Message);
+            Assert.Equal(new[] { "good" }, definitions.GetNames());
+        }
+
+        private ToolManager DiscoverUnversioned(out ToolSettingsProvider settings)
+        {
+            Manifest("bin", """{ "name": "bin", "paths": ["%APPDIR%\\x"] }""");
+            settings = new ToolSettingsProvider(storage, definitions);
+            definitions.Discover(root);
+            return new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, null);
+        }
+
+        [Fact]
+        public void Unversioned_IsOnThePathAfterDiscover()
+        {
+            var manager = DiscoverUnversioned(out _);
+
+            Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(manager.GetPath));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("default")]
+        public void Unversioned_KeepsWorkingWithStoredOrDefaultSelection(string selected)
+        {
+            var manager = DiscoverUnversioned(out var settings);
+            if (selected != null)
+                settings.UpdateSettings("bin", s => s.Version = selected);
+
+            var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("| bin"));
+
+            Assert.Equal(new[] { "bin", "default", "default", "Enabled" }, row.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(manager.GetPath));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("latest")]
+        public void Unversioned_SelectExplainsAndChangesNothing(string version)
+        {
+            var manager = DiscoverUnversioned(out var settings);
+            var before = settings.GetSettings("bin").Version;
+
+            var output = TestTools.CaptureConsole(() => manager.Select("bin", version));
+
+            Assert.Contains("not versioned", output);
+            Assert.Equal(before, settings.GetSettings("bin").Version);
         }
 
         [Theory]
         [InlineData("""{ "version": "1.0.0" }""")]
-        [InlineData("""{ "name": "x" }""")]
+        [InlineData("""{ "versioned": true }""")]
         public void InvalidManifest_ThrowsWithItsDirectory(string content)
         {
             Manifest("x", content);

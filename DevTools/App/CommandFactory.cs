@@ -19,6 +19,7 @@ internal class CommandFactory : ICommandFactory
         cmd.Subcommands.Add(BuildPruneCommand());
         cmd.Subcommands.Add(BuildInstallCommand());
         cmd.Subcommands.Add(BuildUpdateCommand());
+        cmd.Subcommands.Add(BuildRemoveCommand());
         cmd.Subcommands.Add(BuildSetupCommand());
         cmd.Subcommands.Add(BuildPathCommand());
         cmd.Subcommands.Add(BuildEnvsCommand());
@@ -84,6 +85,16 @@ internal class CommandFactory : ICommandFactory
         var applicationArgument = new Argument<string>("application");
         var cmd = new Command("update", "Install the newest version if it is newer than the installed ones.") { applicationArgument };
         cmd.SetAction(result => manager.Update(result.GetValue(applicationArgument)));
+        return cmd;
+    }
+
+    private Command BuildRemoveCommand()
+    {
+        var applicationArgument = new Argument<string>("application");
+        var versionArgument = new Argument<string>("version") { Description = "Exact version to delete from disk." };
+        var cmd = new Command("remove", "Delete an installed version of a versioned application.") { applicationArgument, versionArgument };
+        cmd.Aliases.Add("rm");
+        cmd.SetAction(result => manager.Remove(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
         return cmd;
     }
 
