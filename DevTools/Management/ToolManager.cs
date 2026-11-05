@@ -99,12 +99,12 @@ public class ToolManager(
 
         var target = version == MetaVersion.Latest
             ? available.FirstOrDefault()
-            : available.FirstOrDefault(i => i.Version == version);
+            : available.FirstOrDefault(i => VersionNumber.AreEqual(i.Version, version));
 
         if (target == null)
             throw new InvalidOperationException($"Version {version} of {application} not found");
 
-        if (toolDefinitionProvider.GetVersions(application).Any(i => i.Manifest.Version == target.Version))
+        if (toolDefinitionProvider.GetVersions(application).Any(i => VersionNumber.AreEqual(i.Manifest.Version, target.Version)))
         {
             Console.WriteLine($"{application} {target.Version} is already installed");
             return;
@@ -125,7 +125,7 @@ public class ToolManager(
 
         var installed = toolDefinitionProvider.GetVersion(application, MetaVersion.Latest);
 
-        if (installed != null && Version.TryParse(installed.Manifest.Version, out var current) && Version.Parse(newest.Version) <= current)
+        if (installed != null && VersionNumber.TryParse(installed.Manifest.Version, out var current) && VersionNumber.TryParse(newest.Version, out var available) && available <= current)
         {
             Console.WriteLine($"{application} is up to date, the newest installed version is {installed.Manifest.Version} and the newest available is {newest.Version}");
             return;
@@ -138,7 +138,7 @@ public class ToolManager(
     {
         Discover();
 
-        var definition = toolDefinitionProvider.GetVersions(application).SingleOrDefault(i => i.Manifest.Version == version);
+        var definition = toolDefinitionProvider.GetVersions(application).SingleOrDefault(i => VersionNumber.AreEqual(i.Manifest.Version, version));
 
         if (definition == null)
             throw new InvalidOperationException($"Version {version} of {application} not found");
@@ -148,7 +148,7 @@ public class ToolManager(
 
         var selected = toolSettingsProvider.GetSettings(application).Version;
 
-        if (selected == version)
+        if (VersionNumber.AreEqual(selected, version))
             throw new InvalidOperationException($"{application} {version} is selected, use `select {application}` to switch to another version first");
 
         toolInstaller.Remove(definition.Path);

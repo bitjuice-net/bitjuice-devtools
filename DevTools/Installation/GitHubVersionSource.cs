@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using DevTools.Infrastructure;
 
 namespace DevTools.Installation;
 
@@ -109,6 +110,6 @@ public class GitHubVersionSource(HttpClient client) : IVersionSource
         var match = tagPattern.Match(tag);
         var version = match.Groups["version"].Value;
 
-        return match.Success && Version.TryParse(version, out _) ? new RemoteVersion(version, tag, assets) : null;
+        return match.Success && Version.TryParse(version, out _) ? new RemoteVersion(VersionNumber.Normalize(version), tag, assets, version) : null;
     }
 }

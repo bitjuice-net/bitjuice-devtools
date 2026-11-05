@@ -84,6 +84,30 @@ public sealed class DiscoverTests : IDisposable
     }
 
     [Fact]
+    public void Versioned_ThrowsOnTwoPartAndThreePartNamesOfOneVersion()
+    {
+        Manifest("java", """{ "name": "java", "versioned": true }""");
+        Dirs(@"java\1.2", @"java\1.2.0");
+
+        var error = Assert.Throws<InvalidOperationException>(() => definitions.Discover(root));
+
+        Assert.Contains(Path.Combine(root, "java", "1.2"), error.Message);
+    }
+
+    [Fact]
+    public void Versioned_FindsVersionByEitherName()
+    {
+        Manifest("java", """{ "name": "java", "versioned": true }""");
+        Dirs(@"java\1.2.0", @"java\103.0");
+
+        definitions.Discover(root);
+
+        Assert.Equal("1.2.0", definitions.GetVersion("java", "1.2").Manifest.Version);
+        Assert.Equal("103.0", definitions.GetVersion("java", "103.0.0").Manifest.Version);
+        Assert.Equal(new[] { "1.2.0", "103.0" }, Versions("java"));
+    }
+
+    [Fact]
     public void Versioned_IgnoresLegacyManifestInVersionDirectory()
     {
         Manifest("java", """{ "name": "java", "versioned": true }""");

@@ -552,6 +552,189 @@ public sealed class ToolInstallerTests : IDisposable
         }
     }
 
+    // Archives built with 7-Zip: root/bin/app.txt, root/empty.txt and root/emptydir.
+    private const string SevenZipNormal = "N3q8ryccAATvsKLmhAAAAAAAAAAhAAAAAAAAACz49QEBAARoZWxsbwAAAIEzB64P4OxyY2LTejR4Zaj6VcxzqN/ldRyFArIRgoRbvi9vAbHbjhx7PRc2XnP65OlL7vQkAbvFYoKYnnvtpZWMmj4o6Ynx4RWQLCOz/Q/XsO4q4JOPtAUe/PF/rvrVm3kmVT9+haEGhRnIiGNULOKsnJ85tI8eZAAXBgkBCXsABwsBAAEjAwEBBV0AEAAADIDyCgH5tVmKAAA=";
+
+    // A solid archive with a/one.txt, a/two.txt and a/three.txt.
+    private const string SevenZipSolid = "N3q8ryccAAQWSo5VfwAAAAAAAAAhAAAAAAAAAH0i6e4BAApvbmV0aHJlZXR3bwAAAIEzB64Pzt0HYQkqrtOqhSYoGKffAUXJhZCOpS4NhLmsJMtDZ5jrkYntIEgfsl260gexiFg6Egz1jDXIVlsYx3WUvQ3UiRaTSAvMJGc4v8VA2KwQ2hYKOLu2xrT9WMRLvzTCyoGuBap6rkbGOGkAFwYPAQlwAAcLAQABIwMBAQVdABAAAAyAvgoBAxvsbwAA";
+
+    // An archive with a file named ../../evil.txt.
+    private const string SevenZipTraversal = "N3q8ryccAAQA2a+HCAAAAAAAAACSAAAAAAAAAGMXvRYBAANldmlsAAEEBgABCQgABwsBAAEhIQEADAQACAoBUjH7jQAABQMOAcAZCQAAAAAAAAAAABExAHgAeAAAAHgAeAAvAHgAeAAAAC4ALgAvAC4ALgAvAGUAdgBpAGwALgB0AHgAdAAAABkCAAAUGgEAqsUKjQtt3QGqxQqNC23dAarFCo0Lbd0BFQ4BABAAAAAQAAAAIAAAAAAA";
+
+    private void SevenZipRemote(string base64)
+    {
+        versions.Versions.Add(new RemoteVersion("1.0.0", "v1.0.0", new[] { new RemoteAsset("app.7z", Url, null) }));
+        downloader.Files[Url] = Convert.FromBase64String(base64);
+    }
+
+    [Fact]
+    public void Install_Extracts7zWithStripRoot()
+    {
+        Source("""[ { "type": "download", "asset": "app.7z" }, { "type": "extract", "stripRoot": true } ]""");
+        SevenZipRemote(SevenZipNormal);
+
+        Install();
+
+        Assert.Equal("hello", File.ReadAllText(Installed("1.0.0", "bin", "app.txt")));
+        Assert.Equal(0, new FileInfo(Installed("1.0.0", "empty.txt")).Length);
+        Assert.True(Directory.Exists(Installed("1.0.0", "emptydir")));
+        Assert.False(File.Exists(Installed("1.0.0", "app.7z")));
+        AssertNoWorkDirectories();
+    }
+
+    [Fact]
+    public void Install_ExtractsSolid7z()
+    {
+        Source("""[ { "type": "download", "asset": "app.7z" }, { "type": "extract" } ]""");
+        SevenZipRemote(SevenZipSolid);
+
+        Install();
+
+        Assert.Equal("one", File.ReadAllText(Installed("1.0.0", "a", "one.txt")));
+        Assert.Equal("two", File.ReadAllText(Installed("1.0.0", "a", "two.txt")));
+        Assert.Equal("three", File.ReadAllText(Installed("1.0.0", "a", "three.txt")));
+    }
+
+    [Fact]
+    public void Install_7zWithPathOutsideDirectoryFails()
+    {
+        Source("""[ { "type": "download", "asset": "app.7z" }, { "type": "extract" } ]""");
+        SevenZipRemote(SevenZipTraversal);
+
+        var error = Assert.Throws<InvalidOperationException>(() => Install());
+
+        Assert.Contains("outside", error.Message);
+        Assert.False(File.Exists(Path.Combine(appDir, "evil.txt")));
+        Assert.False(File.Exists(Path.Combine(root, "evil.txt")));
+        Assert.False(Directory.Exists(Installed("1.0.0")));
+        AssertNoWorkDirectories();
+    }
+
+    [Fact]
+    public void Install_Corrupted7zFailsAndLeavesNothing()
+    {
+        Source("""[ { "type": "download", "asset": "app.7z" }, { "type": "extract" } ]""");
+        SevenZipRemote(Convert.ToBase64String(new byte[] { 1, 2, 3, 4 }));
+
+        Assert.ThrowsAny<Exception>(() => Install());
+
+        Assert.False(Directory.Exists(Installed("1.0.0")));
+        AssertNoWorkDirectories();
+    }
+
+    private void RemoteTwoPart()
+    {
+        Source("""[ { "type": "download", "asset": "app-{version}.zip" } ]""");
+        versions.Versions.Add(new RemoteVersion("12.2.0", "v12.2", new[] { new RemoteAsset("app-12.2.zip", Url, null) }, "12.2"));
+        downloader.Files[Url] = new byte[] { 1 };
+    }
+
+    [Fact]
+    public void Install_NormalizedVersionUsesSourceFormInPlaceholdersAndThreePartsInDirectory()
+    {
+        RemoteTwoPart();
+
+        Install();
+
+        Assert.True(File.Exists(Installed("12.2.0", "app-12.2.zip")));
+        Assert.False(Directory.Exists(Installed("12.2")));
+    }
+
+    [Theory]
+    [InlineData("12.2")]
+    [InlineData("12.2.0")]
+    public void Install_AcceptsVersionInEitherForm(string version)
+    {
+        RemoteTwoPart();
+
+        Install(version);
+
+        Assert.True(Directory.Exists(Installed("12.2.0")));
+    }
+
+    [Fact]
+    public void Install_LatestDoesNothingWhenTheSameVersionIsInstalledInThreeParts()
+    {
+        Directory.CreateDirectory(Installed("12.2.0"));
+        RemoteTwoPart();
+
+        Install();
+
+        Assert.Empty(downloader.Urls);
+    }
+
+    [Fact]
+    public void Install_TwoPartRemoteDoesNothingWhenInstalledInThreeParts()
+    {
+        Directory.CreateDirectory(Installed("81.0.0"));
+        Source("""[ { "type": "download", "asset": "app-{version}.zip" } ]""");
+        Remote("81.0", new byte[] { 1 });
+
+        Install("81.0");
+
+        Assert.Empty(downloader.Urls);
+        Assert.False(Directory.Exists(Installed("81.0")));
+    }
+
+    [Theory]
+    [InlineData("103.0.0", "103.0")]
+    [InlineData("103.0", "103.0.0")]
+    public void Update_TreatsBothFormsAsTheSameVersion(string installed, string remote)
+    {
+        Directory.CreateDirectory(Installed(installed));
+        Remote(remote, new byte[] { 1 });
+
+        Update();
+
+        Assert.Empty(downloader.Urls);
+    }
+
+    [Fact]
+    public void Update_TwoPartRemoteNewerThanThreePartInstalledIsInstalled()
+    {
+        Directory.CreateDirectory(Installed("81.0.0"));
+        Remote("103.0", new byte[] { 1 });
+
+        Update();
+
+        Assert.True(Directory.Exists(Installed("103.0")));
+    }
+
+    [Fact]
+    public void Remove_AcceptsVersionInEitherForm()
+    {
+        InstalledFile("1.2.0");
+        InstalledFile("2.0.0");
+
+        Remove("1.2");
+
+        Assert.False(Directory.Exists(Installed("1.2.0")));
+    }
+
+    [Fact]
+    public void Remove_SelectedVersionIsRefusedInEitherForm()
+    {
+        InstalledFile("1.2.0");
+        InstalledFile("2.0.0");
+        definitions.Discover(root);
+        settings.UpdateSettings("app", s => s.Version = "1.2.0");
+
+        Assert.Throws<InvalidOperationException>(() => Remove("1.2"));
+
+        Assert.True(Directory.Exists(Installed("1.2.0")));
+    }
+
+    [Fact]
+    public void Select_StoresInstalledNameOfTheVersion()
+    {
+        Directory.CreateDirectory(Installed("1.2.0"));
+        definitions.Discover(root);
+
+        TestTools.CaptureConsole(() => manager.Select("app", "1.2"));
+
+        Assert.Equal("1.2.0", settings.GetSettings("app").Version);
+    }
+
     [Fact]
     public void Install_NonHttpsUrlIsRejected()
     {

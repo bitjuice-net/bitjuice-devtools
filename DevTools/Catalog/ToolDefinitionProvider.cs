@@ -30,7 +30,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
     public List<ToolDefinition> GetVersions(string application)
     {
         return Tools.TryGetValue(application, out var versions) 
-            ? versions.OrderBy(i => Version.TryParse(i.Manifest.Version, out var v) ? v : new Version()).ToList() 
+            ? versions.OrderBy(i => VersionNumber.TryParse(i.Manifest.Version, out var v) ? v : new Version()).ToList() 
             : new List<ToolDefinition>();
     }
 
@@ -38,7 +38,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
     {
         var versions = GetVersions(application);
 
-        var exact = versions.SingleOrDefault(i => i.Manifest.Version == version);
+        var exact = versions.SingleOrDefault(i => VersionNumber.AreEqual(i.Manifest.Version, version));
         if (exact != null)
             return exact;
 
@@ -142,7 +142,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
     private static void ThrowOnDuplicateVersions(IEnumerable<ToolDefinition> apps)
     {
         var duplicate = apps
-            .GroupBy(i => (i.Manifest.Name, i.Manifest.Version))
+            .GroupBy(i => (i.Manifest.Name, Version: VersionNumber.Normalize(i.Manifest.Version)))
             .FirstOrDefault(i => i.Count() > 1);
 
         if (duplicate != null)

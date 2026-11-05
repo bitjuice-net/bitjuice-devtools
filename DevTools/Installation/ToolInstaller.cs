@@ -8,6 +8,7 @@ using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using DevTools.Infrastructure;
+using SharpCompress.Archives.SevenZip;
 
 namespace DevTools.Installation;
 
@@ -201,7 +202,34 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
             return;
         }
 
-        throw new InvalidOperationException($"Unsupported archive `{Path.GetFileName(archive)}`, expected .zip, .tar.gz or .tgz");
+        if (archive.EndsWith(".7z", StringComparison.OrdinalIgnoreCase))
+        {
+            ExtractSevenZip(archive, destination);
+            return;
+        }
+
+        throw new InvalidOperationException($"Unsupported archive `{Path.GetFileName(archive)}`, expected .zip, .tar.gz, .tgz or .7z");
+    }
+
+    private static void ExtractSevenZip(string archive, string destination)
+    {
+        using var sevenZip = SevenZipArchive.OpenArchive(archive);
+        using var reader = sevenZip.ExtractAllEntries();
+
+        while (reader.MoveToNextEntry())
+        {
+            var path = GetSafePath(destination, reader.Entry.Key);
+
+            if (reader.Entry.IsDirectory)
+            {
+                Directory.CreateDirectory(path);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            using var file = File.Create(path);
+            reader.WriteEntryTo(file);
+        }
     }
 
     private static string GetSingleRoot(string destination, string archive)
@@ -247,6 +275,6 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
 
     private static string Expand(string value, RemoteVersion version)
     {
-        return value.Replace("{version}", version.Version).Replace("{tag}", version.Tag);
+        return value.Replace("{version}", version.SourceVersion ?? version.Version).Replace("{tag}", version.Tag);
     }
 }

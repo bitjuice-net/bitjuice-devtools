@@ -84,6 +84,18 @@ public class GitHubVersionSourceTests
     }
 
     [Fact]
+    public async Task TwoPartVersionIsNormalizedAndKeepsItsSourceForm()
+    {
+        var handler = new FakeHandler(_ => Json("""[ { "name": "v12.2" }, { "name": "v12.1.4" }, { "name": "v12.2.0" } ]"""));
+        var source = new GitHubVersionSource(new HttpClient(handler));
+
+        var versions = await source.GetVersionsAsync(new VersionSource { Type = "github-tags", Repo = "a/b", Tag = @"^v(?<version>\d+\.\d+(\.\d+)?)$" });
+
+        Assert.Equal(new[] { "12.2.0", "12.1.4" }, versions.Select(i => i.Version));
+        Assert.Equal("12.2", versions[0].SourceVersion);
+    }
+
+    [Fact]
     public async Task SendsTokenOnlyWhenSet()
     {
         var handler = new FakeHandler(_ => Json("[]"));
