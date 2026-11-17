@@ -63,4 +63,29 @@ internal static class TestTools
         }
         return writer.ToString();
     }
+
+    public static string CaptureError(Action action)
+    {
+        var original = Console.Error;
+        using var writer = new StringWriter();
+        Console.SetError(writer);
+        try
+        {
+            action();
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+        return writer.ToString();
+    }
+
+    // Unix permissions do not exist on Windows, there is nothing to check.
+    public static void AssertExecutable(string fileName)
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Assert.True(File.GetUnixFileMode(fileName).HasFlag(UnixFileMode.UserExecute), $"{fileName} is not executable");
+    }
 }

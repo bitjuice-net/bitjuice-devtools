@@ -20,7 +20,7 @@ public class ToolManager(
 
     private readonly Settings settings = settings.Value;
 
-    public void GetSetup()
+    public void GetSetup(Shell shell)
     {
         var pathBuilder = new PathBuilder();
         var envsBuilder = new EnvsBuilder();
@@ -31,8 +31,10 @@ public class ToolManager(
             envsBuilder.AddApplication(version);
         }
 
-        Console.WriteLine("DT_PATH=" + pathBuilder.Build());
-        Console.WriteLine(envsBuilder.Build());
+        // devtools itself (and dt.cmd next to it) stays on PATH after the tools.
+        var paths = pathBuilder.Values.Append(PathUtils.AssemblyDirectory);
+
+        Console.WriteLine(ShellScripts.Setup(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable));
     }
 
     public void GetPath()

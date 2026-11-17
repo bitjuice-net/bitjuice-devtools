@@ -281,6 +281,17 @@ public sealed class ToolInstallerTests : IDisposable
     }
 
     [Fact]
+    public void Install_DownloadedFileIsExecutable()
+    {
+        Source("""[ { "type": "download", "asset": "app-{version}.zip", "to": "bin\\tool" } ]""");
+        Remote("1.0.0", new byte[] { 1 });
+
+        Install();
+
+        TestTools.AssertExecutable(Installed("1.0.0", "bin", "tool"));
+    }
+
+    [Fact]
     public void Install_ZipEntryOutsideDestinationIsRejected()
     {
         Source("""[ { "type": "download", "asset": "app-{version}.zip" }, { "type": "extract" } ]""");
@@ -575,6 +586,7 @@ public sealed class ToolInstallerTests : IDisposable
         Install();
 
         Assert.Equal("hello", File.ReadAllText(Installed("1.0.0", "bin", "app.txt")));
+        TestTools.AssertExecutable(Installed("1.0.0", "bin", "app.txt"));
         Assert.Equal(0, new FileInfo(Installed("1.0.0", "empty.txt")).Length);
         Assert.True(Directory.Exists(Installed("1.0.0", "emptydir")));
         Assert.False(File.Exists(Installed("1.0.0", "app.7z")));

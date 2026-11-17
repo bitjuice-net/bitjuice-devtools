@@ -133,6 +133,7 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         Console.WriteLine($"Downloading {url}");
         await downloader.DownloadAsync(url, fileName);
         VerifyDigest(fileName, digest);
+        MakeExecutable(fileName);
 
         return fileName;
     }
@@ -227,9 +228,20 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            using var file = File.Create(path);
-            reader.WriteEntryTo(file);
+            using (var file = File.Create(path))
+                reader.WriteEntryTo(file);
+            MakeExecutable(path);
         }
+    }
+
+    // A bare download or a 7z entry carries no Unix permissions, so it could not be run without the executable bit.
+    private static void MakeExecutable(string fileName)
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        const UnixFileMode execute = UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+        File.SetUnixFileMode(fileName, File.GetUnixFileMode(fileName) | execute);
     }
 
     private static string GetSingleRoot(string destination, string archive)
@@ -273,7 +285,8 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
 
         var path = Path.GetFullPath(Path.Combine(root, normalized));
 
-        if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!path.StartsWith(root + Path.DirectorySeparatorChar, comparison))
             throw OutsideOfInstallation(relative);
 
         return path;

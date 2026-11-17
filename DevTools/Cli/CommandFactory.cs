@@ -1,4 +1,5 @@
-﻿using System.CommandLine;
+﻿using System;
+using System.CommandLine;
 using DevTools.Catalog;
 using DevTools.Management;
 
@@ -16,6 +17,7 @@ internal class CommandFactory(IToolManager manager) : ICommandFactory
         cmd.Subcommands.Add(BuildUpdateCommand());
         cmd.Subcommands.Add(BuildRemoveCommand());
         cmd.Subcommands.Add(BuildSetupCommand());
+        cmd.Subcommands.Add(BuildInitCommand());
         cmd.Subcommands.Add(BuildPathCommand());
         cmd.Subcommands.Add(BuildEnvsCommand());
         cmd.Subcommands.Add(BuildListCommand());
@@ -28,8 +30,37 @@ internal class CommandFactory(IToolManager manager) : ICommandFactory
 
     private Command BuildSetupCommand()
     {
-        var cmd = new Command("setup", "Get setup string.");
-        cmd.SetAction(_ => manager.GetSetup());
+        var shellOption = new Option<Shell>("--shell")
+        {
+            Description = "Output format: cmd, bash or zsh.",
+            DefaultValueFactory = _ => ShellScripts.Default
+        };
+        var cmd = new Command("setup", "Get commands that set PATH and environment variables in the shell.") { shellOption };
+        cmd.SetAction(result => manager.GetSetup(result.GetValue(shellOption)));
+        return cmd;
+    }
+
+    private static Command BuildInitCommand()
+    {
+        var shellArgument = new Argument<Shell>("shell") { Description = "cmd, bash or zsh." };
+        var installOption = new Option<bool>("--install") { Description = "Load devtools in every new shell: AutoRun in the registry for cmd, ~/.bashrc or ~/.zshrc for the others." };
+        var uninstallOption = new Option<bool>("--uninstall") { Description = "Stop loading devtools in new shells, other AutoRun commands and ~/.bashrc or ~/.zshrc lines stay." };
+        var cmd = new Command("init", "Get the shell integration script.") { shellArgument, installOption, uninstallOption };
+        cmd.Validators.Add(result =>
+        {
+            if (result.GetValue(installOption) && result.GetValue(uninstallOption))
+                result.AddError("Use either --install or --uninstall.");
+        });
+        cmd.SetAction(result =>
+        {
+            var shell = result.GetValue(shellArgument);
+            if (result.GetValue(installOption))
+                ShellInstaller.Install(shell, Environment.ProcessPath);
+            else if (result.GetValue(uninstallOption))
+                ShellInstaller.Uninstall(shell);
+            else
+                Console.WriteLine(ShellScripts.Init(shell, Environment.ProcessPath));
+        });
         return cmd;
     }
 

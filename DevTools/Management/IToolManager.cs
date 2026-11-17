@@ -2,7 +2,7 @@
 
 public interface IToolManager
 {
-    void GetSetup();
+    void GetSetup(Shell shell);
     void GetPath();
     void GetEnvs();
     void Discover();

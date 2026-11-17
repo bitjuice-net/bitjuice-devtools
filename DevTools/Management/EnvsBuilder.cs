@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
 
@@ -7,7 +8,9 @@ namespace DevTools.Management;
 
 public class EnvsBuilder
 {
-    private readonly List<string> values = new();
+    private readonly List<KeyValuePair<string, string>> values = new();
+
+    public IReadOnlyList<KeyValuePair<string, string>> Values => values;
 
     public void AddApplication(ToolDefinition version)
     {
@@ -20,11 +23,11 @@ public class EnvsBuilder
         Environment.SetEnvironmentVariable("APPDIR", version.Path);
 
         foreach (var (key, value) in version.Manifest.Envs) 
-            values.Add($"{key}={Environment.ExpandEnvironmentVariables(value)}");
+            values.Add(new(key, Environment.ExpandEnvironmentVariables(value)));
     }
 
     public string Build()
     {
-        return values.Join(Environment.NewLine);
+        return values.Select(i => $"{i.Key}={i.Value}").Join(Environment.NewLine);
     }
 }

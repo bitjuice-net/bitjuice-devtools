@@ -171,7 +171,31 @@ public sealed class DiscoverTests : IDisposable
     {
         var manager = DiscoverUnversioned(out _);
 
-        Assert.Contains(Path.Combine(root, "bin") + @"\x", TestTools.CaptureConsole(manager.GetPath));
+        Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(manager.GetPath));
+    }
+
+    [Fact]
+    public void Path_JoinsApplicationsWithSystemSeparator()
+    {
+        Manifest("a", """{ "name": "a", "paths": ["%APPDIR%"] }""");
+        var manager = DiscoverUnversioned(out _);
+
+        var path = TestTools.CaptureConsole(manager.GetPath).TrimEnd();
+
+        Assert.Equal(new[] { Path.Combine(root, "a"), Path.Combine(root, "bin", "x") }, path.Split(Path.PathSeparator));
+    }
+
+    [Fact]
+    public void Setup_BashExportsPathAndEnvs()
+    {
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%\\bin"], "envs": { "JAVA_HOME": "%APPDIR%" } }""");
+        var manager = DiscoverUnversioned(out _);
+
+        var setup = TestTools.CaptureConsole(() => manager.GetSetup(Shell.Bash));
+
+        Assert.Contains($"export JAVA_HOME='{Path.Combine(root, "java")}'", setup);
+        Assert.Contains("export DT_ENVS='JAVA_HOME'", setup);
+        Assert.Contains("export DT_PATH='", setup);
     }
 
     [Theory]
@@ -186,7 +210,7 @@ public sealed class DiscoverTests : IDisposable
         var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("| bin"));
 
         Assert.Equal(new[] { "bin", "default", "default", "Enabled" }, row.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        Assert.Contains(Path.Combine(root, "bin") + @"\x", TestTools.CaptureConsole(manager.GetPath));
+        Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(manager.GetPath));
     }
 
     [Theory]
