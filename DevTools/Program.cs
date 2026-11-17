@@ -16,7 +16,7 @@ internal class Program
     private static int Main(string[] args)
     {
         var config = new ConfigurationBuilder()
-            .AddJsonFile("settings.json")
+            .AddJsonFile("settings.json", optional: true)
             .AddJsonFile("settings.local.json", optional: true)
             .Build();
 
