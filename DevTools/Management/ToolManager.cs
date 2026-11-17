@@ -148,19 +148,13 @@ public class ToolManager(
             : $"{application} has no installed versions left");
     }
 
-    // An application without a local .source gets its manifests from the sources first.
+    // Manifests from the sources are brought to their synced revision first, an application without them gets them.
     private string FindOrFetchSourceDirectory(string application)
     {
-        var root = PathUtils.GetRootedPath(settings.RootPath);
-        var directory = toolDefinitionProvider.FindDirectory(root, application);
-
-        if (sources != null && (directory == null || !File.Exists(Path.Combine(directory, ToolSource.FileName))))
-        {
-            sources.Value.Fetch(application);
+        if (sources != null && sources.Value.Refresh(application))
             Scan();
-        }
 
-        return toolDefinitionProvider.FindSourceDirectory(root, application);
+        return toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
     }
 
     private void InstallVersion(string application, string directory, RemoteVersion target)

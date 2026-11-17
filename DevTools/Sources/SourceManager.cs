@@ -18,14 +18,15 @@ public interface ISourceManager
     void Add(string repository);
     void Remove(string repository);
     void List();
-    void Update(string application, bool force);
-    void Index(string directory);
+    void Sync();
 
-    // Gets .app and .source of an application that has no .source yet, used by `app install`.
-    void Fetch(string application);
+    // Brings .app and .source of an application to the revision in the synced index, before it is installed or updated.
+    // Returns true when a file changed.
+    bool Refresh(string application);
 }
 
 // Manifest repositories: a directory per application with .app and .source, and index.json with their revisions.
+// The indexes are kept in data/indexes.json, `source sync` gets them again.
 public partial class SourceManager(IOptions<Settings> options, IStorage storage, IToolDefinitionProvider definitions, IRepositoryClient client)
     : ISourceManager
 {
@@ -33,12 +34,15 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     private static readonly string[] ManifestFiles = { ManifestFileName, ToolSource.FileName };
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
     private static readonly string FileName = PathUtils.GetDataPath("sources.json");
+    private static readonly string IndexesFileName = PathUtils.GetDataPath("indexes.json");
 
     private readonly Settings settings = options.Value;
-    private readonly Dictionary<string, RepositoryIndex> indexes = new(Comparer);
 
     private SourcesState state;
     private SourcesState State => state ??= storage.Load<SourcesState>(FileName);
+
+    private Dictionary<string, RepositoryIndex> indexes;
+    private Dictionary<string, RepositoryIndex> Indexes => indexes ??= new Dictionary<string, RepositoryIndex>(storage.Load<Dictionary<string, RepositoryIndex>>(IndexesFileName), Comparer);
 
     public void Add(string repository)
     {
@@ -50,9 +54,11 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             return;
         }
 
-        var index = GetIndex(repository);
+        var index = DownloadIndex(repository);
         State.Repositories.Add(repository);
+        Indexes[repository] = index;
         Save();
+        SaveIndexes();
 
         Console.WriteLine($"Added {repository} with {index.Apps.Count} application(s)");
     }
@@ -64,7 +70,9 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         if (State.Repositories.RemoveAll(i => Comparer.Equals(i, repository)) == 0)
             throw new InvalidOperationException($"{repository} is not a source, see `source list`");
 
+        Indexes.Remove(repository);
         Save();
+        SaveIndexes();
         Console.WriteLine($"Removed {repository}, manifests fetched from it stay");
     }
 
@@ -87,73 +95,56 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         table.Write(Format.MarkDown);
     }
 
-    public void Fetch(string application)
+    public void Sync()
     {
-        var (repository, entry) = Locate(application)
-            ?? throw new InvalidOperationException($"No `{ToolSource.FileName}` file found for {application}, locally or in sources: {State.Repositories.Join(", ")}");
-
-        Write(application, repository, entry.Revision, false);
-    }
-
-    public void Update(string application, bool force)
-    {
-        var names = application != null ? new[] { application } : State.Apps.Keys.Order(StringComparer.Ordinal).ToArray();
-
-        if (names.Length == 0)
+        if (State.Repositories.Count == 0)
         {
-            Console.WriteLine("No manifests were fetched from sources yet, `app install` fetches them");
+            Console.WriteLine("No sources, add one with `source add owner/repo`");
             return;
         }
 
-        foreach (var name in names)
+        foreach (var repository in State.Repositories)
         {
-            var located = Locate(name);
-            if (located == null)
+            try
             {
-                if (application != null)
-                    throw new InvalidOperationException($"{name} is not in sources: {State.Repositories.Join(", ")}");
-
-                Console.WriteLine($"{name}: no longer in sources, kept as it is");
-                continue;
+                var index = Indexes[repository] = DownloadIndex(repository);
+                Console.WriteLine($"{repository}: {index.Apps.Count} application(s)");
             }
-
-            var (repository, entry) = located.Value;
-            var fetched = State.Apps.GetValueOrDefault(name);
-
-            if (!force && fetched != null && Comparer.Equals(fetched.Repository, repository) && entry.Revision <= fetched.Revision)
+            catch (Exception e) when (IsUnavailable(e))
             {
-                Console.WriteLine($"{name}: up to date, revision {fetched.Revision}");
-                continue;
+                Console.Error.WriteLine($"{repository}: {e.Message}{(Indexes.ContainsKey(repository) ? ", kept the previous list" : "")}");
             }
-
-            Write(name, repository, entry.Revision, force);
         }
+
+        SaveIndexes();
     }
 
-    public void Index(string directory)
+    public bool Refresh(string application)
     {
-        directory = Path.GetFullPath(directory);
-        var index = new RepositoryIndex();
+        var root = PathUtils.GetRootedPath(settings.RootPath);
+        var directory = definitions.FindDirectory(root, application);
+        var hasSource = directory != null && File.Exists(Path.Combine(directory, ToolSource.FileName));
+        var fetched = State.Apps.GetValueOrDefault(application);
 
-        foreach (var app in new DirectoryInfo(directory).EnumerateDirectories().Where(i => !i.Name.StartsWith('.')))
+        // Manifests written by hand, not fetched from a source, are not touched.
+        if (hasSource && fetched == null)
+            return false;
+
+        var located = Locate(application);
+        if (located == null)
         {
-            var manifestFile = Path.Combine(app.FullName, ManifestFileName);
-            var sourceFile = Path.Combine(app.FullName, ToolSource.FileName);
+            if (hasSource)
+                return false;
 
-            if (!File.Exists(manifestFile) && !File.Exists(sourceFile))
-                continue;
-
-            if (!File.Exists(manifestFile) || !File.Exists(sourceFile))
-                throw new InvalidOperationException($"`{app.FullName}` needs both {ManifestFileName} and {ToolSource.FileName}");
-
-            var source = storage.Load<ToolSource>(sourceFile);
-            Validate(storage.Load<ToolManifest>(manifestFile), source, app.Name, app.FullName);
-            index.Apps[app.Name] = new IndexEntry { Revision = source.Revision };
+            throw new InvalidOperationException($"No `{ToolSource.FileName}` file found for {application}, locally or in sources: {State.Repositories.Join(", ")}. " +
+                "`source sync` gets their newest lists");
         }
 
-        var file = Path.Combine(directory, RepositoryIndex.FileName);
-        storage.Save(file, index);
-        Console.WriteLine($"Wrote {file} with {index.Apps.Count} application(s)");
+        var (repository, entry) = located.Value;
+        if (hasSource && Comparer.Equals(fetched.Repository, repository) && entry.Revision <= fetched.Revision)
+            return false;
+
+        return Write(application, repository, entry.Revision, directory ?? Path.Combine(root, application));
     }
 
     private static void Validate(ToolManifest manifest, ToolSource source, string name, string location)
@@ -189,21 +180,19 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         return null;
     }
 
-    // Replaces a local file only when it is still the one fetched before, so changes made by hand stay unless forced.
-    private void Write(string application, string repository, int revision, bool force)
+    // Replaces a local file only when it is still the one fetched before, so changes made by hand stay.
+    private bool Write(string application, string repository, int revision, string directory)
     {
         var files = ManifestFiles.ToDictionary(i => i, i => Download(repository, $"{application}/{i}")
-            ?? throw new InvalidOperationException($"{repository} lists {application} but has no `{application}/{i}`"));
+            ?? throw new InvalidOperationException($"{repository} lists {application} but has no `{application}/{i}`, `source sync` gets its newest list"));
 
         Validate(JsonStorage.Parse<ToolManifest>(files[ManifestFileName]), JsonStorage.Parse<ToolSource>(files[ToolSource.FileName]), application, $"{repository}/{application}");
-
-        var root = PathUtils.GetRootedPath(settings.RootPath);
-        var directory = definitions.FindDirectory(root, application) ?? Path.Combine(root, application);
         Directory.CreateDirectory(directory);
 
         var fetched = State.Apps.GetValueOrDefault(application);
         var hashes = new Dictionary<string, string>();
         var kept = new List<string>();
+        var changed = false;
 
         foreach (var (file, content) in files)
         {
@@ -211,7 +200,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             var hash = Hash(content);
             var local = File.Exists(path) ? Hash(File.ReadAllBytes(path)) : null;
 
-            if (local != null && local != hash && !force && local != fetched?.Hashes.GetValueOrDefault(file))
+            if (local != null && local != hash && local != fetched?.Hashes.GetValueOrDefault(file))
             {
                 kept.Add(path);
                 if (fetched?.Hashes.GetValueOrDefault(file) is { } previous)
@@ -220,20 +209,24 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             }
 
             if (local != hash)
+            {
                 File.WriteAllBytes(path, content);
+                changed = true;
+            }
             hashes[file] = hash;
         }
 
-        // With a file kept the application is not at the new revision, so the next update tries again.
+        // With a file kept the application is not at the new revision, so the next install or update tries again.
         State.Apps[application] = new FetchedApp { Repository = repository, Revision = kept.Count == 0 ? revision : fetched?.Revision ?? 0, Hashes = hashes };
         Save();
 
         foreach (var path in kept)
-            Console.WriteLine($"Kept `{path}`, it has local changes, use `source update {application} --force` to replace it");
+            Console.WriteLine($"Kept `{path}`, it has local changes, delete it to get revision {revision} from {repository}");
 
-        Console.WriteLine(kept.Count == 0
-            ? $"{application}: revision {revision} from {repository} in {directory}"
-            : $"{application}: stays at revision {fetched?.Revision ?? 0}, revision {revision} needs the kept files replaced");
+        if (kept.Count == 0)
+            Console.WriteLine($"{application}: manifests at revision {revision} from {repository}");
+
+        return changed;
     }
 
     private byte[] Download(string repository, string path)
@@ -248,18 +241,26 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             error = null;
             return GetIndex(repository);
         }
-        catch (Exception e) when (e is InvalidOperationException or HttpRequestException or IOException or System.Text.Json.JsonException)
+        catch (Exception e) when (IsUnavailable(e))
         {
             error = e.Message;
             return null;
         }
     }
 
+    // The synced index, a repository that was never synced is synced on first use.
     private RepositoryIndex GetIndex(string repository)
     {
-        if (indexes.TryGetValue(repository, out var cached))
+        if (Indexes.TryGetValue(repository, out var cached))
             return cached;
 
+        var index = Indexes[repository] = DownloadIndex(repository);
+        SaveIndexes();
+        return index;
+    }
+
+    private RepositoryIndex DownloadIndex(string repository)
+    {
         var content = Download(repository, RepositoryIndex.FileName)
             ?? throw new InvalidOperationException($"{repository} has no {RepositoryIndex.FileName}, is it a manifest repository?");
         var index = JsonStorage.Parse<RepositoryIndex>(content);
@@ -267,7 +268,12 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         if (index.Format > ToolSource.SupportedFormat)
             throw new InvalidOperationException($"{repository} has index format {index.Format}, this devtools supports up to {ToolSource.SupportedFormat}, update devtools");
 
-        return indexes[repository] = index;
+        return index;
+    }
+
+    private static bool IsUnavailable(Exception e)
+    {
+        return e is InvalidOperationException or HttpRequestException or IOException or System.Text.Json.JsonException;
     }
 
     private static string Normalize(string repository)
@@ -289,6 +295,11 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     private void Save()
     {
         storage.Save(FileName, State);
+    }
+
+    private void SaveIndexes()
+    {
+        storage.Save(IndexesFileName, Indexes);
     }
 
     [GeneratedRegex(@"^[\w.-]+/[\w.-]+$")]

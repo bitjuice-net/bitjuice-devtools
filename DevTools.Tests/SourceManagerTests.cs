@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using DevTools.Catalog;
@@ -55,11 +56,18 @@ public sealed class SourceManagerTests : IDisposable
         File.WriteAllText(Path.Combine(directory, ".source"), $$"""{ "format": {{format}}, "revision": {{revision}}, "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "*" } ] }""");
     }
 
-    private void Index(string repository)
+    // index.json as the repository maintainer writes it, from the revisions in .source.
+    private static void Index(string repository)
     {
-        TestTools.CaptureConsole(() => sources.Index(repository));
-        File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(storage.Load<RepositoryIndex>(RepositoryIndex.FileName),
-            new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+        var apps = new Dictionary<string, IndexEntry>();
+        foreach (var directory in Directory.GetDirectories(repository))
+        {
+            var source = Path.Combine(directory, ".source");
+            if (File.Exists(source))
+                apps[Path.GetFileName(directory)] = new IndexEntry { Revision = JsonStorage.Parse<DevTools.Installation.ToolSource>(File.ReadAllBytes(source)).Revision };
+        }
+
+        File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(new { format = 1, apps = apps.ToDictionary(i => i.Key, i => new { revision = i.Value.Revision }) }));
     }
 
     private string Local(string name, string file)
@@ -72,25 +80,20 @@ public sealed class SourceManagerTests : IDisposable
         return storage.Load<SourcesState>("sources.json").Apps.GetValueOrDefault(name);
     }
 
-    // A new instance, like the next devtools command, so the index is read again.
-    private string Update(string application = null, bool force = false)
+    // A new instance, like the next devtools command, that reads the synced indexes again.
+    private SourceManager Next()
     {
-        var next = new SourceManager(Options.Create(new Settings { RootPath = root }), storage, new ToolDefinitionProvider(storage), client);
-        return TestTools.CaptureConsole(() => next.Update(application, force));
+        return new SourceManager(Options.Create(new Settings { RootPath = root }), storage, new ToolDefinitionProvider(storage), client);
     }
 
-    [Fact]
-    public void Index_ListsRevisionsOfApplications()
+    private string Refresh(string application)
     {
-        Manifest(repo, "age", 3);
-        Manifest(repo, "java", 1);
-        Directory.CreateDirectory(Path.Combine(repo, ".github"));
+        return TestTools.CaptureConsole(() => Next().Refresh(application));
+    }
 
-        TestTools.CaptureConsole(() => sources.Index(repo));
-
-        var index = storage.Load<RepositoryIndex>(RepositoryIndex.FileName);
-        Assert.Equal(new[] { "age", "java" }, index.Apps.Keys);
-        Assert.Equal(3, index.Apps["age"].Revision);
+    private string Sync()
+    {
+        return TestTools.CaptureConsole(() => Next().Sync());
     }
 
     [Theory]
@@ -98,19 +101,21 @@ public sealed class SourceManagerTests : IDisposable
     [InlineData("""{ "name": "age" }""", """{ "revision": 1 }""", "versioned")]
     [InlineData("""{ "name": "age", "versioned": true }""", """{ }""", "revision of 1 or more")]
     [InlineData("""{ "name": "age", "versioned": true }""", """{ "format": 2, "revision": 1 }""", "has format 2")]
-    public void Index_RejectsInvalidManifests(string app, string source, string message)
+    public void Refresh_RejectsInvalidManifests(string app, string source, string message)
     {
         var directory = Directory.CreateDirectory(Path.Combine(repo, "age")).FullName;
         File.WriteAllText(Path.Combine(directory, ".app"), app);
         File.WriteAllText(Path.Combine(directory, ".source"), source);
+        File.WriteAllText(Path.Combine(repo, RepositoryIndex.FileName), """{ "format": 1, "apps": { "age": { "revision": 1 } } }""");
 
-        var error = Assert.Throws<InvalidOperationException>(() => sources.Index(repo));
+        var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
 
         Assert.Contains(message, error.Message);
+        Assert.False(File.Exists(Local("age", ".source")));
     }
 
     [Fact]
-    public void Fetch_WritesManifestsOfTheFirstSourceThatHasTheApplication()
+    public void Refresh_WritesManifestsOfTheFirstSourceThatHasTheApplication()
     {
         Manifest(other, "java", 1);
         Index(other);
@@ -118,7 +123,7 @@ public sealed class SourceManagerTests : IDisposable
         Index(repo);
         storage.Save("sources.json", new SourcesState { Repositories = new List<string> { other, repo } });
 
-        TestTools.CaptureConsole(() => sources.Fetch("age"));
+        Refresh("age");
 
         Assert.Equal(File.ReadAllText(Path.Combine(repo, "age", ".source")), File.ReadAllText(Local("age", ".source")));
         Assert.True(File.Exists(Local("age", ".app")));
@@ -127,83 +132,88 @@ public sealed class SourceManagerTests : IDisposable
     }
 
     [Fact]
-    public void Fetch_FailsWhenNoSourceHasTheApplication()
+    public void Refresh_FailsWhenNoSourceHasTheApplication()
     {
         Index(repo);
 
-        var error = Assert.Throws<InvalidOperationException>(() => sources.Fetch("age"));
+        var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
 
         Assert.Contains("No `.source` file found for age", error.Message);
+        Assert.Contains("source sync", error.Message);
     }
 
     [Fact]
-    public void Fetch_RejectsNewerFormat()
+    public void Refresh_RejectsNewerFormat()
     {
         Manifest(repo, "age", 1);
         Index(repo);
         Manifest(repo, "age", 1, format: 2);
 
-        var error = Assert.Throws<InvalidOperationException>(() => sources.Fetch("age"));
+        var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
 
         Assert.Contains("update devtools", error.Message);
         Assert.False(File.Exists(Local("age", ".source")));
     }
 
     [Fact]
-    public void Update_GetsNewerRevision()
+    public void Refresh_GetsNewerRevisionAfterSync()
     {
         Manifest(repo, "age", 1);
         Index(repo);
-        TestTools.CaptureConsole(() => sources.Fetch("age"));
+        Refresh("age");
         Manifest(repo, "age", 2, """, "envs": { "AGE": "1" }""");
         Index(repo);
 
-        Update();
+        Refresh("age");
+        Assert.DoesNotContain("AGE", File.ReadAllText(Local("age", ".app")));
+
+        Sync();
+        Refresh("age");
 
         Assert.Contains("AGE", File.ReadAllText(Local("age", ".app")));
         Assert.Equal(2, Fetched("age").Revision);
     }
 
     [Fact]
-    public void Update_SkipsApplicationsAtTheSameRevision()
+    public void Refresh_AtTheSyncedRevisionDownloadsNothing()
     {
         Manifest(repo, "age", 1);
         Index(repo);
-        TestTools.CaptureConsole(() => sources.Fetch("age"));
+        Refresh("age");
         client.Paths.Clear();
 
-        var output = Update();
+        Refresh("age");
 
-        Assert.Contains("up to date", output);
-        Assert.Equal(new[] { RepositoryIndex.FileName }, client.Paths);
+        Assert.Empty(client.Paths);
     }
 
     [Fact]
-    public void Update_KeepsFilesChangedByHandUnlessForced()
+    public void Refresh_KeepsFilesChangedByHandUntilTheyAreDeleted()
     {
         Manifest(repo, "age", 1);
         Index(repo);
-        TestTools.CaptureConsole(() => sources.Fetch("age"));
+        Refresh("age");
         File.WriteAllText(Local("age", ".source"), "{ \"mine\": true }");
         Manifest(repo, "age", 2, """, "envs": { "AGE": "1" }""");
         Index(repo);
+        Sync();
 
-        var output = Update();
+        var output = Refresh("age");
 
-        Assert.Contains("has local changes", output);
-        Assert.Contains("stays at revision 1", output);
+        Assert.Contains("has local changes, delete it", output);
         Assert.Contains("mine", File.ReadAllText(Local("age", ".source")));
         Assert.Contains("AGE", File.ReadAllText(Local("age", ".app")));
         Assert.Equal(1, Fetched("age").Revision);
 
-        Update("age", force: true);
+        File.Delete(Local("age", ".source"));
+        Refresh("age");
 
         Assert.DoesNotContain("mine", File.ReadAllText(Local("age", ".source")));
         Assert.Equal(2, Fetched("age").Revision);
     }
 
     [Fact]
-    public void Update_OfLocalApplicationKeepsItsOwnFiles()
+    public void Refresh_LeavesManifestsWrittenByHand()
     {
         Directory.CreateDirectory(Path.Combine(root, "age"));
         File.WriteAllText(Local("age", ".app"), """{ "name": "age", "versioned": true }""");
@@ -211,10 +221,27 @@ public sealed class SourceManagerTests : IDisposable
         Manifest(repo, "age", 1);
         Index(repo);
 
-        var output = Update("age");
+        var changed = false;
+        TestTools.CaptureConsole(() => changed = Next().Refresh("age"));
 
-        Assert.Contains("has local changes", output);
+        Assert.False(changed);
         Assert.Contains("mine", File.ReadAllText(Local("age", ".source")));
+        Assert.Empty(client.Paths);
+    }
+
+    [Fact]
+    public void Sync_KeepsThePreviousListOfAnUnavailableSource()
+    {
+        Manifest(repo, "age", 1);
+        Index(repo);
+        Sync();
+        File.Delete(Path.Combine(repo, RepositoryIndex.FileName));
+
+        var error = TestTools.CaptureError(() => Sync());
+        Refresh("age");
+
+        Assert.Contains("kept the previous list", error);
+        Assert.True(File.Exists(Local("age", ".source")));
     }
 
     [Fact]

@@ -77,21 +77,10 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         list.SetAction(_ => sources.Value.List());
         cmd.Subcommands.Add(list);
 
-        var updateArgument = new Argument<string>("application") { Arity = ArgumentArity.ZeroOrOne, Description = "Only this application, also one whose files did not come from a source yet." };
-        var forceOption = new Option<bool>("--force") { Description = "Replace files changed by hand." };
-        var update = new Command("update", "Get newer revisions of the manifests fetched from sources.") { updateArgument, forceOption };
-        update.SetAction(result => sources.Value.Update(result.GetValue(updateArgument), result.GetValue(forceOption)));
-        cmd.Subcommands.Add(update);
+        var sync = new Command("sync", "Get the lists of applications and their revisions from all sources, `app install` and `app update` then use the newest manifests.");
+        sync.SetAction(_ => sources.Value.Sync());
+        cmd.Subcommands.Add(sync);
 
-        var indexArgument = new Argument<string>("directory")
-        {
-            Arity = ArgumentArity.ZeroOrOne,
-            Description = "The manifest repository, the current directory by default.",
-            DefaultValueFactory = _ => "."
-        };
-        var index = new Command("index", "Write index.json of a manifest repository from the revisions in its .source files.") { indexArgument };
-        index.SetAction(result => sources.Value.Index(result.GetValue(indexArgument)));
-        cmd.Subcommands.Add(index);
 
         return cmd;
     }

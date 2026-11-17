@@ -18,10 +18,7 @@ public class PathBuilder
         if (version.Manifest.Paths == null)
             return;
 
-        Environment.SetEnvironmentVariable("APPDIR", version.Path);
-
-        // Manifests are usually written with \, which is not a separator outside of Windows.
         foreach (var includePath in version.Manifest.Paths)
-            values.Add(Environment.ExpandEnvironmentVariables(OperatingSystem.IsWindows() ? includePath : includePath.Replace('\\', '/')));
+            values.Add(ManifestVariables.Expand(includePath, version.Path));
     }
 }

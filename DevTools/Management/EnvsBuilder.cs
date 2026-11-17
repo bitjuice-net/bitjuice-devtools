@@ -18,9 +18,7 @@ public class EnvsBuilder
         if (version.Manifest.Envs == null)
             return;
 
-        Environment.SetEnvironmentVariable("APPDIR", version.Path);
-
-        foreach (var (key, value) in version.Manifest.Envs) 
-            values.Add(new(key, Environment.ExpandEnvironmentVariables(value)));
+        foreach (var (key, value) in version.Manifest.Envs)
+            values.Add(new(key, ManifestVariables.Expand(value, version.Path)));
     }
 }

@@ -13,4 +13,5 @@ namespace DevTools.Infrastructure;
 [JsonSerializable(typeof(ToolSource))]
 [JsonSerializable(typeof(SourcesState))]
 [JsonSerializable(typeof(RepositoryIndex))]
+[JsonSerializable(typeof(Dictionary<string, RepositoryIndex>))]
 internal partial class StorageJsonContext : JsonSerializerContext;
