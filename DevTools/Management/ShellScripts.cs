@@ -15,6 +15,22 @@ public static class ShellScripts
     public const string EnvsVariable = "DT_ENVS";
     public const string InitializedVariable = "DT_INITIALIZED";
 
+    // Windows only has cmd integration. Elsewhere $SHELL is the login shell of the user, the one their terminals start.
+    // The parent process is not used, it is sudo, an IDE or a script as often as the shell.
+    public static Shell Detect(bool isWindows, Func<string, string> getEnv)
+    {
+        if (isWindows)
+            return Shell.Cmd;
+
+        var shell = getEnv("SHELL");
+        return Path.GetFileName(shell ?? "") switch
+        {
+            "bash" => Shell.Bash,
+            "zsh" => Shell.Zsh,
+            _ => throw new InvalidOperationException($"Cannot detect the shell from SHELL=`{shell}`, pass cmd, bash or zsh")
+        };
+    }
+
     // The PATH from before devtools is kept in DT_BASEPATH, so every reload builds PATH from scratch.
     // Selected tools go first, so they win over the system ones.
     public static string Env(Shell shell, IEnumerable<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, Func<string, string> getEnv)

@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
@@ -52,6 +54,28 @@ public class MetaVersionTests
         TestTools.CaptureConsole(() => manager.Select("node", "latest"));
 
         Assert.Equal("latest", settings.GetSettings("node").Version);
+    }
+
+    [Theory]
+    [InlineData("0", "latest")]
+    [InlineData("1", "24.11.1")]
+    [InlineData("3", "8.9.3")]
+    [InlineData("4", "oldest")]
+    public void Select_WithoutVersionListsLatestFirstAndOldestLast(string input, string expected)
+    {
+        var input0 = Console.In;
+        Console.SetIn(new StringReader(input + Environment.NewLine));
+        try
+        {
+            var output = TestTools.CaptureConsole(() => manager.Select("node", null));
+
+            Assert.Contains("[0] latest\n[1] 24.11.1\n[2] 12.18.1\n[3] 8.9.3\n[4] oldest", output.ReplaceLineEndings("\n"));
+            Assert.Equal(expected, settings.GetSettings("node").Version);
+        }
+        finally
+        {
+            Console.SetIn(input0);
+        }
     }
 
     [Fact]

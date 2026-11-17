@@ -57,7 +57,7 @@ internal class CommandFactory(IToolManager manager) : ICommandFactory
 
     private Command BuildShellCommand()
     {
-        var cmd = new Command("shell", "Shell integration, start with `shell install cmd|bash|zsh` to get `dt` in every new shell.");
+        var cmd = new Command("shell", "Shell integration, start with `shell install` to get `dt` in every new shell. The shell is cmd on Windows and $SHELL elsewhere, unless given.");
 
         cmd.Subcommands.Add(ShellSubcommand("install", "Load devtools in every new shell: AutoRun in the registry for cmd, ~/.bashrc or ~/.zshrc for the others.",
             shell => ShellInstaller.Install(shell, Environment.ProcessPath)));
@@ -73,11 +73,24 @@ internal class CommandFactory(IToolManager manager) : ICommandFactory
 
     private static Command ShellSubcommand(string name, string description, Action<Shell> action)
     {
-        var shellArgument = new Argument<string>("shell");
-        shellArgument.AcceptOnlyFromAmong(Enum.GetNames<Shell>().Select(i => i.ToLowerInvariant()).ToArray());
+        var shellArgument = new Argument<string>("shell")
+        {
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => AutoShell
+        };
+        shellArgument.AcceptOnlyFromAmong(Enum.GetNames<Shell>().Select(i => i.ToLowerInvariant()).Prepend(AutoShell).ToArray());
         var cmd = new Command(name, description) { shellArgument };
-        cmd.SetAction(result => action(Enum.Parse<Shell>(result.GetValue(shellArgument), ignoreCase: true)));
+        cmd.SetAction(result => action(ParseShell(result.GetValue(shellArgument))));
         return cmd;
+    }
+
+    private const string AutoShell = "auto";
+
+    private static Shell ParseShell(string value)
+    {
+        return value == AutoShell
+            ? ShellScripts.Detect(OperatingSystem.IsWindows(), Environment.GetEnvironmentVariable)
+            : Enum.Parse<Shell>(value, ignoreCase: true);
     }
 
     private Command BuildScanCommand()

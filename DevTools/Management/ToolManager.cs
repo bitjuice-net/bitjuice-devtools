@@ -190,7 +190,8 @@ public class ToolManager(
             if (!versions.Any())
                 return;
 
-            var choices = versions.Select(i => i.Manifest.Version).Concat(new[] { MetaVersion.Latest, MetaVersion.Oldest }).ToList();
+            // Newest first, so latest is next to the newest version and oldest next to the oldest one.
+            var choices = versions.Select(i => i.Manifest.Version).Reverse().Prepend(MetaVersion.Latest).Append(MetaVersion.Oldest).ToList();
 
             for (var i = 0; i < choices.Count; i++)
                 Console.WriteLine($"[{i}] {choices[i]}");

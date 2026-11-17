@@ -22,6 +22,31 @@ public class ShellScriptsTests
     }
 
     [Theory]
+    [InlineData("/bin/bash", Shell.Bash)]
+    [InlineData("/usr/local/bin/zsh", Shell.Zsh)]
+    [InlineData("zsh", Shell.Zsh)]
+    public void Detect_UsesShellVariableOutsideWindows(string shell, Shell expected)
+    {
+        Assert.Equal(expected, ShellScripts.Detect(false, Env(("SHELL", shell))));
+    }
+
+    [Fact]
+    public void Detect_IsCmdOnWindows()
+    {
+        Assert.Equal(Shell.Cmd, ShellScripts.Detect(true, Env(("SHELL", "/usr/bin/bash"))));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("/usr/bin/fish")]
+    public void Detect_FailsForUnsupportedShell(string shell)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => ShellScripts.Detect(false, Env(("SHELL", shell))));
+
+        Assert.Contains("pass cmd, bash or zsh", error.Message);
+    }
+
+    [Theory]
     [InlineData(Shell.Bash)]
     [InlineData(Shell.Zsh)]
     public void Env_PosixShellsExportQuotedValuesAndPutToolsFirst(Shell shell)
