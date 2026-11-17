@@ -262,15 +262,26 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
             File.Move(from, to);
     }
 
+    // Paths from .source files and archives may use \ or /, and mean the same on every system.
     private static string GetSafePath(string work, string relative)
     {
+        var normalized = relative.Replace('\\', '/');
         var root = Path.GetFullPath(work);
-        var path = Path.GetFullPath(Path.Combine(root, relative));
+
+        if (normalized.StartsWith('/') || normalized.Contains(':'))
+            throw OutsideOfInstallation(relative);
+
+        var path = Path.GetFullPath(Path.Combine(root, normalized));
 
         if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Path `{relative}` is outside of the installation directory");
+            throw OutsideOfInstallation(relative);
 
         return path;
+    }
+
+    private static InvalidOperationException OutsideOfInstallation(string relative)
+    {
+        return new InvalidOperationException($"Path `{relative}` is outside of the installation directory");
     }
 
     private static string Expand(string value, RemoteVersion version)

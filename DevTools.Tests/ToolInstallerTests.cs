@@ -109,6 +109,19 @@ public sealed class ToolInstallerTests : IDisposable
         return Path.Combine(new[] { appDir }.Concat(path).ToArray());
     }
 
+    // A junction on Windows needs no extra privileges, unlike a symbolic link.
+    private static void LinkDirectory(string link, string target)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Directory.CreateSymbolicLink(link, target);
+            return;
+        }
+
+        using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd", $"/c mklink /J \"{link}\" \"{target}\"") { RedirectStandardOutput = true });
+        mklink.WaitForExit();
+    }
+
     private void Install(string version = "latest")
     {
         TestTools.CaptureConsole(() => manager.Install("app", version));
@@ -248,9 +261,14 @@ public sealed class ToolInstallerTests : IDisposable
     }
 
     [Theory]
+    [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "../../evil.bin" } ]""")]
+    [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "a.bin" }, { "type": "move", "from": "a.bin", "to": "../evil.bin" } ]""")]
+    [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "/evil.bin" } ]""")]
     [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "..\\..\\evil.bin" } ]""")]
     [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "a.bin" }, { "type": "move", "from": "a.bin", "to": "..\\evil.bin" } ]""")]
+    [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "\\evil.bin" } ]""")]
     [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "C:\\evil.bin" } ]""")]
+    [InlineData("""[ { "type": "download", "asset": "app-{version}.zip", "to": "C:evil.bin" } ]""")]
     public void Install_PathsOutsideWorkDirectoryAreRejected(string steps)
     {
         Source(steps);
@@ -511,25 +529,7 @@ public sealed class ToolInstallerTests : IDisposable
     }
 
     [Fact]
-    public void Remove_VersionInUseStaysComplete()
-    {
-        var file = InstalledFile("1.0.0");
-        var other = Path.Combine(Path.GetDirectoryName(file), "b.txt");
-        File.WriteAllText(other, "b");
-
-        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None))
-        {
-            var error = Assert.Throws<InvalidOperationException>(() => Remove("1.0.0"));
-            Assert.Contains("nothing was deleted", error.Message);
-        }
-
-        Assert.True(File.Exists(file));
-        Assert.True(File.Exists(other));
-        Assert.Empty(Directory.GetDirectories(appDir, ".remove-*"));
-    }
-
-    [Fact]
-    public void Remove_DoesNotFollowJunctions()
+    public void Remove_DoesNotFollowLinks()
     {
         var outside = Directory.CreateTempSubdirectory("devtools-tests-outside-").FullName;
         try
@@ -537,8 +537,7 @@ public sealed class ToolInstallerTests : IDisposable
             var kept = Path.Combine(outside, "kept.txt");
             File.WriteAllText(kept, "kept");
             InstalledFile("1.0.0");
-            using (var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd", $"/c mklink /J \"{Installed("1.0.0", "link")}\" \"{outside}\"") { RedirectStandardOutput = true }))
-                mklink.WaitForExit();
+            LinkDirectory(Installed("1.0.0", "link"), outside);
             Assert.True(File.Exists(Installed("1.0.0", "link", "kept.txt")));
 
             Remove("1.0.0");

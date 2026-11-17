@@ -47,7 +47,7 @@ public sealed class DiscoverTests : IDisposable
     public void Versioned_CreatesVersionFromEachVersionDirectoryOnly()
     {
         Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%\\bin"] }""");
-        Dirs(@"java\11.0.1", @"java\25.0.5", @"java\docs", @"java\.install-1.0.0-abc");
+        Dirs("java/11.0.1", "java/25.0.5", "java/docs", "java/.install-1.0.0-abc");
 
         definitions.Discover(root);
 
@@ -60,7 +60,7 @@ public sealed class DiscoverTests : IDisposable
     {
         Manifest("mingw", """{ "name": "mingw", "versioned": true, "paths": ["%APPDIR%\\bin"] }""");
         Manifest("mingw-legacy", """{ "name": "mingw", "versioned": true, "paths": ["%APPDIR%\\bin", "%APPDIR%\\msys"] }""");
-        Dirs(@"mingw\15.2.0", @"mingw-legacy\1.0.0");
+        Dirs("mingw/15.2.0", "mingw-legacy/1.0.0");
 
         definitions.Discover(root);
 
@@ -74,7 +74,7 @@ public sealed class DiscoverTests : IDisposable
     {
         Manifest("mingw", """{ "name": "mingw", "versioned": true }""");
         Manifest("mingw-legacy", """{ "name": "mingw", "versioned": true }""");
-        Dirs(@"mingw\1.0.0", @"mingw-legacy\1.0.0");
+        Dirs("mingw/1.0.0", "mingw-legacy/1.0.0");
 
         var error = Assert.Throws<InvalidOperationException>(() => definitions.Discover(root));
 
@@ -87,7 +87,7 @@ public sealed class DiscoverTests : IDisposable
     public void Versioned_ThrowsOnTwoPartAndThreePartNamesOfOneVersion()
     {
         Manifest("java", """{ "name": "java", "versioned": true }""");
-        Dirs(@"java\1.2", @"java\1.2.0");
+        Dirs("java/1.2", "java/1.2.0");
 
         var error = Assert.Throws<InvalidOperationException>(() => definitions.Discover(root));
 
@@ -98,7 +98,7 @@ public sealed class DiscoverTests : IDisposable
     public void Versioned_FindsVersionByEitherName()
     {
         Manifest("java", """{ "name": "java", "versioned": true }""");
-        Dirs(@"java\1.2.0", @"java\103.0");
+        Dirs("java/1.2.0", "java/103.0");
 
         definitions.Discover(root);
 
@@ -111,7 +111,7 @@ public sealed class DiscoverTests : IDisposable
     public void Versioned_IgnoresLegacyManifestInVersionDirectory()
     {
         Manifest("java", """{ "name": "java", "versioned": true }""");
-        Manifest(@"java\11.0.1", """{ "name": "java", "version": "%DIRNAME%" }""");
+        Manifest("java/11.0.1", """{ "name": "java", "version": "%DIRNAME%" }""");
 
         definitions.Discover(root);
 
@@ -122,7 +122,7 @@ public sealed class DiscoverTests : IDisposable
     public void Unversioned_DoesNotTreatSubdirectoriesAsVersions()
     {
         Manifest("android-sdk", """{ "name": "android-sdk" }""");
-        Dirs(@"android-sdk\34.0.0", @"android-sdk\platform-tools");
+        Dirs("android-sdk/34.0.0", "android-sdk/platform-tools");
 
         definitions.Discover(root);
 
@@ -171,7 +171,7 @@ public sealed class DiscoverTests : IDisposable
     {
         var manager = DiscoverUnversioned(out _);
 
-        Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(manager.GetPath));
+        Assert.Contains(Path.Combine(root, "bin") + @"\x", TestTools.CaptureConsole(manager.GetPath));
     }
 
     [Theory]
@@ -186,7 +186,7 @@ public sealed class DiscoverTests : IDisposable
         var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("| bin"));
 
         Assert.Equal(new[] { "bin", "default", "default", "Enabled" }, row.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(manager.GetPath));
+        Assert.Contains(Path.Combine(root, "bin") + @"\x", TestTools.CaptureConsole(manager.GetPath));
     }
 
     [Theory]
@@ -219,7 +219,7 @@ public sealed class DiscoverTests : IDisposable
     public void Prune_KeepsMetaVersionsAndRemovesStaleEntries()
     {
         Manifest("java", """{ "name": "java", "versioned": true }""");
-        Dirs(@"java\11.0.1");
+        Dirs("java/11.0.1");
         var settings = new ToolSettingsProvider(storage, definitions);
         var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, null);
         definitions.Discover(root);
