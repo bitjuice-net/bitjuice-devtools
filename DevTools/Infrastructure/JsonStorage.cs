@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.Globalization;
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
@@ -26,9 +28,20 @@ public class JsonStorage : IStorage
         return JsonSerializer.Deserialize<T>(json, Options);
     }
 
+    public const string StateFileName = "state";
+
+    // Every save also writes a new stamp to `state`, so shells reload PATH and variables only after a change.
     public void Save<T>(string fileName, T obj) where T : new()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(fileName)!);
+        var directory = Path.GetDirectoryName(fileName)!;
+        Directory.CreateDirectory(directory);
         File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));
+        File.WriteAllText(Path.Combine(directory, StateFileName), DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture));
+    }
+
+    public static string ReadState(string directory)
+    {
+        var file = Path.Combine(directory, StateFileName);
+        return File.Exists(file) ? File.ReadAllText(file).Trim() : "";
     }
 }

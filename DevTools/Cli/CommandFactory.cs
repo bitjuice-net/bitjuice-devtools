@@ -11,7 +11,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 {
     public RootCommand CreateRootCommand()
     {
-        var cmd = new RootCommand("Manages list of development tool. Allows easy switching between different versions of the same app.");
+        var cmd = new RootCommand("Installs development tools and switches between their versions.");
 
         cmd.Subcommands.Add(BuildAppCommand());
         cmd.Subcommands.Add(BuildCacheCommand());
@@ -38,7 +38,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 
     private Command BuildAppCommand()
     {
-        var cmd = new Command("app", "Applications: choose versions, download, update and delete them.");
+        var cmd = new Command("app", "Select, install, update and remove application versions.");
         cmd.Subcommands.Add(BuildListCommand());
         cmd.Subcommands.Add(BuildSelectCommand());
         cmd.Subcommands.Add(BuildEnableCommand());
@@ -51,7 +51,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 
     private Command BuildCacheCommand()
     {
-        var cmd = new Command("cache", "Application cache built by scanning the tools directory.");
+        var cmd = new Command("cache", "The list of applications found in the tools directory.");
         cmd.Subcommands.Add(BuildScanCommand());
         cmd.Subcommands.Add(BuildPruneCommand());
         return cmd;
@@ -59,7 +59,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 
     private Command BuildSourceCommand()
     {
-        var cmd = new Command("source", "Repositories of .app and .source files, `app install` gets the files of applications you do not have from them.");
+        var cmd = new Command("source", "Repositories of .app and .source files used by `app install` and `app update`.");
 
         var addArgument = new Argument<string>("repository") { Description = "owner/repo on GitHub or a full directory path." };
         var add = new Command("add", "Add a manifest repository.") { addArgument };
@@ -72,12 +72,13 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         remove.SetAction(result => sources.Value.Remove(result.GetValue(removeArgument)));
         cmd.Subcommands.Add(remove);
 
-        var list = new Command("list", "List manifest repositories and their applications.");
+        var listArgument = new Argument<string>("repository") { Arity = ArgumentArity.ZeroOrOne, Description = "List the applications of this repository." };
+        var list = new Command("list", "List manifest repositories.") { listArgument };
         list.Aliases.Add("ls");
-        list.SetAction(_ => sources.Value.List());
+        list.SetAction(result => sources.Value.List(result.GetValue(listArgument)));
         cmd.Subcommands.Add(list);
 
-        var sync = new Command("sync", "Get the lists of applications and their revisions from all sources, `app install` and `app update` then use the newest manifests.");
+        var sync = new Command("sync", "Get the newest lists of applications from all sources.");
         sync.SetAction(_ => sources.Value.Sync());
         cmd.Subcommands.Add(sync);
 
@@ -87,7 +88,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 
     private Command BuildShellCommand()
     {
-        var cmd = new Command("shell", "Shell integration, start with `shell install` to get `dt` in every new shell. The shell is cmd on Windows and $SHELL elsewhere, unless given.");
+        var cmd = new Command("shell", "Shell integration, `shell install` gives every new shell the `dt` command.");
 
         cmd.Subcommands.Add(ShellSubcommand("install", "Load devtools in every new shell: AutoRun in the registry for cmd, ~/.bashrc or ~/.zshrc for the others.",
             shell => ShellInstaller.Install(shell, Environment.ProcessPath)));
@@ -106,6 +107,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         var shellArgument = new Argument<string>("shell")
         {
             Arity = ArgumentArity.ZeroOrOne,
+            Description = "auto is cmd on Windows and $SHELL elsewhere.",
             DefaultValueFactory = _ => AutoShell
         };
         shellArgument.AcceptOnlyFromAmong(Enum.GetNames<Shell>().Select(i => i.ToLowerInvariant()).Prepend(AutoShell).ToArray());
@@ -125,14 +127,14 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 
     private Command BuildScanCommand()
     {
-        var cmd = new Command("scan", "Scan the tools directory for applications and versions.");
+        var cmd = new Command("scan", "Find applications and versions in the tools directory.");
         cmd.SetAction(_ => manager.Scan());
         return cmd;
     }
 
     private Command BuildPruneCommand()
     {
-        var cmd = new Command("prune", "Refresh the application cache and remove settings of applications and versions that no longer exist.");
+        var cmd = new Command("prune", "Scan again and remove settings of applications and versions that no longer exist.");
         cmd.SetAction(_ => manager.Prune());
         return cmd;
     }
@@ -143,19 +145,30 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         var versionArgument = new Argument<string>("version")
         {
             Arity = ArgumentArity.ZeroOrOne,
-            Description = "Version to install or latest.",
+            Description = "Version to install, latest by default.",
             DefaultValueFactory = _ => MetaVersion.Latest
         };
-        var cmd = new Command("install", "Download and install application version.") { applicationArgument, versionArgument };
+        var cmd = new Command("install", "Download and install a version of an application.") { applicationArgument, versionArgument };
         cmd.SetAction(result => manager.Install(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
         return cmd;
     }
 
     private Command BuildUpdateCommand()
     {
-        var applicationArgument = new Argument<string>("application");
-        var cmd = new Command("update", "Install the newest version if it is newer than the installed ones.") { applicationArgument };
-        cmd.SetAction(result => manager.Update(result.GetValue(applicationArgument)));
+        var applicationArgument = new Argument<string>("application")
+        {
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = "Without it every application with a .source is updated."
+        };
+        var cmd = new Command("update", "Install the newest version when it is newer than the installed ones.") { applicationArgument };
+        cmd.SetAction(result =>
+        {
+            var application = result.GetValue(applicationArgument);
+            if (application == null)
+                manager.UpdateAll();
+            else
+                manager.Update(application);
+        });
         return cmd;
     }
 
@@ -163,7 +176,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
     {
         var applicationArgument = new Argument<string>("application");
         var versionArgument = new Argument<string>("version") { Description = "Exact version to delete from disk." };
-        var cmd = new Command("remove", "Delete an installed version of a versioned application.") { applicationArgument, versionArgument };
+        var cmd = new Command("remove", "Delete an installed version of an application.") { applicationArgument, versionArgument };
         cmd.Aliases.Add("rm");
         cmd.SetAction(result => manager.Remove(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
         return cmd;
@@ -171,10 +184,18 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 
     private Command BuildListCommand()
     {
+        var applicationArgument = new Argument<string>("application") { Arity = ArgumentArity.ZeroOrOne, Description = "Show the details of this application." };
         var allOption = new Option<bool>("--all", "-a") { Description = "Include orphaned settings of applications that no longer exist." };
-        var cmd = new Command("list", "List available applications.") { allOption };
+        var cmd = new Command("list", "List applications and their versions.") { applicationArgument, allOption };
         cmd.Aliases.Add("ls");
-        cmd.SetAction(result => manager.List(result.GetValue(allOption)));
+        cmd.SetAction(result =>
+        {
+            var application = result.GetValue(applicationArgument);
+            if (application == null)
+                manager.List(result.GetValue(allOption));
+            else
+                manager.Show(application);
+        });
         return cmd;
     }
 
@@ -182,7 +203,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
     {
         var applicationArgument = new Argument<string>("application");
         var versionArgument = new Argument<string>("version") { Arity = ArgumentArity.ZeroOrOne };
-        var cmd = new Command("select", "Select application version.") { applicationArgument, versionArgument };
+        var cmd = new Command("select", "Select the version of an application, without a version choose it from a list.") { applicationArgument, versionArgument };
         cmd.SetAction(result => manager.Select(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
         cmd.Aliases.Add("s");
         return cmd;
@@ -191,7 +212,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
     private Command BuildDisableCommand()
     {
         var applicationArgument = new Argument<string>("application");
-        var cmd = new Command("disable", "Disable application.") { applicationArgument };
+        var cmd = new Command("disable", "Take an application off PATH without deleting it.") { applicationArgument };
         cmd.Aliases.Add("d");
         cmd.SetAction(result => manager.SetDisabled(result.GetValue(applicationArgument), true));
 
@@ -201,7 +222,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
     private Command BuildEnableCommand()
     {
         var applicationArgument = new Argument<string>("application");
-        var cmd = new Command("enable", "Enable application.") { applicationArgument };
+        var cmd = new Command("enable", "Put a disabled application back on PATH.") { applicationArgument };
         cmd.Aliases.Add("e");
         cmd.SetAction(result => manager.SetDisabled(result.GetValue(applicationArgument), false));
         return cmd;

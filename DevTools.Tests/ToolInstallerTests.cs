@@ -894,4 +894,39 @@ public sealed class ToolInstallerTests : IDisposable
             Directory.Delete(repo, true);
         }
     }
+
+    [Fact]
+    public void UpdateAll_UpdatesEveryApplicationWithSourceAndReportsFailures()
+    {
+        Source("""[ { "type": "download", "asset": "app-{version}.zip" }, { "type": "extract" } ]""");
+        Remote("1.0.0", Zip(("app.txt", "x")));
+        Install();
+        Remote("2.0.0", Zip(("app.txt", "y")));
+        var broken = Path.Combine(root, "broken");
+        Directory.CreateDirectory(Path.Combine(broken, "0.1.0"));
+        File.WriteAllText(Path.Combine(broken, ".app"), """{ "name": "broken", "versioned": true, "paths": ["%APPDIR%"] }""");
+        File.WriteAllText(Path.Combine(broken, ".source"), "{ }");
+        var plain = Path.Combine(root, "plain");
+        Directory.CreateDirectory(plain);
+        File.WriteAllText(Path.Combine(plain, ".app"), """{ "name": "plain", "paths": ["%APPDIR%"] }""");
+
+        var output = new StringWriter();
+        var original = Console.Out;
+        Console.SetOut(output);
+        string error;
+        try
+        {
+            error = TestTools.CaptureError(() =>
+                Assert.Contains("Could not update broken", Assert.Throws<InvalidOperationException>(() => manager.UpdateAll()).Message));
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        Assert.True(Directory.Exists(Installed("2.0.0")));
+        Assert.Contains("broken: ", error);
+        Assert.Contains("Updated 1, up to date 0, failed 1 of 2 application(s): app", output.ToString());
+        Assert.DoesNotContain("plain", output + error);
+    }
 }

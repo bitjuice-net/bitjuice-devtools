@@ -96,14 +96,34 @@ public class MetaVersionTests
     }
 
     [Fact]
-    public void List_ShowsResolvedVersionAndEnabledStatus()
+    public void List_ShowsResolvedVersionAndSummarizesManyVersions()
     {
         TestTools.CaptureConsole(() => manager.Select("node", "oldest"));
+        storage.Load<Dictionary<string, List<ToolDefinition>>>(TestTools.CacheFile)["node"].Add(TestTools.Definition("node", "25.0.0"));
 
-        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("| node"));
+        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("node "));
 
-        Assert.Contains("oldest (8.9.3)", row);
-        Assert.Contains("Enabled", row);
+        Assert.Equal(new[] { "node", "oldest (8.9.3)", "8.9.3 - 25.0.0 (4 versions)" }, row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    [Fact]
+    public void List_MarksDisabledApplications()
+    {
+        TestTools.CaptureConsole(() => manager.SetDisabled("node", true));
+
+        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("node "));
+
+        Assert.EndsWith("disabled", row.TrimEnd());
+    }
+
+    [Fact]
+    public void Show_ListsVersionsNewestFirstAndWhatTheSelectedOneSets()
+    {
+        var output = TestTools.CaptureConsole(() => manager.Show("node"));
+
+        Assert.Contains("versions   24.11.1, 12.18.1, 8.9.3", output);
+        Assert.Contains("selected   latest (24.11.1)", output);
+        Assert.Contains(@"path       C:\Tools\node\24.11.1", output);
     }
 
     [Fact]
@@ -111,8 +131,47 @@ public class MetaVersionTests
     {
         settings.UpdateSettings("ghost", s => s.Version = "latest");
 
-        var row = TestTools.CaptureConsole(() => manager.List(true)).Split('\n').Single(i => i.StartsWith("| ghost"));
+        var row = TestTools.CaptureConsole(() => manager.List(true)).Split('\n').Single(i => i.StartsWith("ghost "));
 
-        Assert.Contains("Orphaned", row);
+        Assert.EndsWith("orphaned", row.TrimEnd());
+    }
+
+    [Fact]
+    public void Select_UnknownApplicationOrVersionIsAnError()
+    {
+        Assert.Contains("ghost not found", Assert.Throws<InvalidOperationException>(() => manager.Select("ghost", "latest")).Message);
+        Assert.Contains("installed: 8.9.3, 12.18.1, 24.11.1", Assert.Throws<InvalidOperationException>(() => manager.Select("node", "99")).Message);
+    }
+
+    [Fact]
+    public void Select_WithoutInputKeepsTheVersion()
+    {
+        TestTools.CaptureConsole(() => manager.Select("node", "oldest"));
+        var input = Console.In;
+        Console.SetIn(new StringReader(Environment.NewLine));
+        try
+        {
+            Assert.Contains("node still uses oldest (8.9.3)", TestTools.CaptureConsole(() => manager.Select("node", null)));
+            Assert.Equal("oldest", settings.GetSettings("node").Version);
+        }
+        finally
+        {
+            Console.SetIn(input);
+        }
+    }
+
+    [Fact]
+    public void SetDisabled_UnknownApplicationIsAnErrorAndNotStored()
+    {
+        Assert.Throws<InvalidOperationException>(() => manager.SetDisabled("ghost", true));
+
+        Assert.DoesNotContain("ghost", settings.GetApplications());
+    }
+
+    [Fact]
+    public void SetDisabled_SaysWhatChanged()
+    {
+        Assert.Contains("node is disabled", TestTools.CaptureConsole(() => manager.SetDisabled("node", true)));
+        Assert.True(settings.GetSettings("node").IsDisabled);
     }
 }

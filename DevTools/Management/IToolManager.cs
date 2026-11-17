@@ -7,8 +7,10 @@ public interface IToolManager
     void Prune();
     void Install(string application, string version);
     void Update(string application);
+    void UpdateAll();
     void Remove(string application, string version);
     void List(bool all);
+    void Show(string application);
     void Select(string application, string version);
     void SetDisabled(string application, bool isDisabled);
 }

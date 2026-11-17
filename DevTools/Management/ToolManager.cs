@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using ConsoleTables;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
 using DevTools.Installation;
@@ -40,7 +39,7 @@ public class ToolManager(
         // devtools itself (and dt.cmd next to it) stays on PATH after the tools.
         var paths = pathBuilder.Values.Append(PathUtils.AssemblyDirectory);
 
-        Console.WriteLine(ShellScripts.Env(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable));
+        Console.WriteLine(ShellScripts.Env(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable, JsonStorage.ReadState(Path.Combine(PathUtils.AssemblyDirectory, PathUtils.DataDirectoryName))));
     }
 
     public void Scan()
@@ -104,7 +103,54 @@ public class ToolManager(
     public void Update(string application)
     {
         Scan();
+        UpdateOne(application);
+    }
 
+    // Every application with a .source, one that fails does not stop the others.
+    public void UpdateAll()
+    {
+        Scan();
+
+        var names = toolDefinitionProvider.GetNames().Where(HasSource).ToList();
+        if (names.Count == 0)
+        {
+            Console.WriteLine($"No application has a `{ToolSource.FileName}` file, `app install` gets one from the sources");
+            return;
+        }
+
+        var updated = new List<string>();
+        var failed = new List<string>();
+
+        foreach (var name in names)
+        {
+            try
+            {
+                if (UpdateOne(name))
+                    updated.Add(name);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"{name}: {e.Message}");
+                failed.Add(name);
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Updated {updated.Count}, up to date {names.Count - updated.Count - failed.Count}, failed {failed.Count} of {names.Count} application(s)" +
+            (updated.Count > 0 ? $": {updated.Join(", ")}" : ""));
+
+        if (failed.Count > 0)
+            throw new InvalidOperationException($"Could not update {failed.Join(", ")}");
+    }
+
+    private bool HasSource(string application)
+    {
+        var definition = toolDefinitionProvider.GetVersions(application).FirstOrDefault();
+        return definition is { Manifest.Versioned: true } && File.Exists(Path.Combine(Path.GetDirectoryName(definition.Path)!, ToolSource.FileName));
+    }
+
+    private bool UpdateOne(string application)
+    {
         var directory = FindOrFetchSourceDirectory(application);
         var newest = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult().FirstOrDefault();
 
@@ -116,20 +162,20 @@ public class ToolManager(
         if (installed != null && VersionNumber.TryParse(installed.Manifest.Version, out var current) && VersionNumber.TryParse(newest.Version, out var available) && available <= current)
         {
             Console.WriteLine($"{application} is up to date, the newest installed version is {installed.Manifest.Version} and the newest available is {newest.Version}");
-            return;
+            return false;
         }
 
         InstallVersion(application, directory, newest);
+        return true;
     }
 
     public void Remove(string application, string version)
     {
         Scan();
 
-        var definition = toolDefinitionProvider.GetVersions(application).SingleOrDefault(i => VersionNumber.AreEqual(i.Manifest.Version, version));
-
-        if (definition == null)
-            throw new InvalidOperationException($"Version {version} of {application} not found");
+        var installed = FindVersions(application);
+        var definition = installed.SingleOrDefault(i => VersionNumber.AreEqual(i.Manifest.Version, version))
+            ?? throw new InvalidOperationException($"Version {version} of {application} not found, installed: {installed.Select(i => i.Manifest.Version).Join(", ")}");
 
         if (!definition.Manifest.Versioned)
             throw new InvalidOperationException($"{application} in `{definition.Path}` is not versioned, only versions of versioned applications can be removed");
@@ -137,7 +183,7 @@ public class ToolManager(
         var selected = toolSettingsProvider.GetSettings(application).Version;
 
         if (VersionNumber.AreEqual(selected, version))
-            throw new InvalidOperationException($"{application} {version} is selected, use `select {application}` to switch to another version first");
+            throw new InvalidOperationException($"{application} {version} is selected, use `sl {application}` to select another version first");
 
         toolInstaller.Remove(definition.Path);
         Scan();
@@ -167,12 +213,12 @@ public class ToolManager(
         var selected = toolSettingsProvider.GetSettings(application).Version;
         Console.WriteLine(toolDefinitionProvider.GetVersion(application, selected)?.Manifest.Version == target.Version
             ? $"{application} now uses {target.Version}"
-            : $"{application} still uses {FormatVersion(application, selected)}, use `select {application} {target.Version}` to switch");
+            : $"{application} still uses {FormatVersion(application, selected)}, use `sl {application} {target.Version}` to switch");
     }
 
     public void List(bool all)
     {
-        var table = new ConsoleTable("Name", "Selected", "Installed", "Status");
+        var table = new TextTable("NAME", "SELECTED", "INSTALLED", "STATUS");
 
         var names = toolDefinitionProvider.GetNames();
         if (all)
@@ -180,19 +226,74 @@ public class ToolManager(
 
         foreach (var name in names)
         {
-            var versions = toolDefinitionProvider.GetVersions(name).Select(i => i.Manifest.Version).ToList();
             var toolSettings = toolSettingsProvider.GetSettings(name);
-            table.AddRow(name, FormatVersion(name, toolSettings.Version), versions.Join(", "), GetStatus(name, toolSettings));
+
+            if (IsNotVersioned(name))
+                table.AddRow(name, "-", "-", GetStatus(name, toolSettings));
+            else
+                table.AddRow(name, FormatVersion(name, toolSettings.Version), SummarizeVersions(name), GetStatus(name, toolSettings));
         }
 
-        Console.WriteLine("List of applications:");
-        Console.WriteLine();
+        table.Write();
+    }
 
-        table.Write(Format.MarkDown);
+    // Many versions would make the column too wide, `ls <application>` lists all of them.
+    private string SummarizeVersions(string application)
+    {
+        var versions = toolDefinitionProvider.GetVersions(application).Select(i => i.Manifest.Version).ToList();
+        return versions.Count <= 3 ? versions.Join(", ") : $"{versions[0]} - {versions[^1]} ({versions.Count} versions)";
+    }
+
+    public void Show(string application)
+    {
+        var versions = FindVersions(application);
+        var toolSettings = toolSettingsProvider.GetSettings(application);
+        var selected = toolSettings.Version != null ? toolDefinitionProvider.GetVersion(application, toolSettings.Version) : null;
+        var versioned = !IsNotVersioned(application);
+        var directory = versioned ? Path.GetDirectoryName(versions[0].Path) : versions[0].Path;
+
+        var rows = new List<(string Name, string Value)>
+        {
+            ("status", GetStatus(application, toolSettings) is { Length: > 0 } status ? status : "enabled"),
+            ("directory", directory)
+        };
+
+        if (versioned)
+        {
+            rows.Add(("selected", FormatVersion(application, toolSettings.Version)));
+            rows.Add(("versions", versions.Select(i => i.Manifest.Version).Reverse().Join(", ")));
+        }
+
+        if (selected != null)
+        {
+            var paths = new PathBuilder();
+            var envs = new EnvsBuilder();
+            paths.AddApplication(selected);
+            envs.AddApplication(selected);
+            rows.AddRange(paths.Values.Select(i => ("path", i)));
+            rows.AddRange(envs.Values.Select(i => ("env", $"{i.Key}={i.Value}")));
+        }
+
+        rows.Add(("source", DescribeSource(application, directory)));
+
+        Console.WriteLine(application);
+        foreach (var (name, value) in rows)
+            Console.WriteLine($"  {name,-10} {value}");
+    }
+
+    private string DescribeSource(string application, string directory)
+    {
+        if (!File.Exists(Path.Combine(directory, ToolSource.FileName)))
+            return "none, versions are added by hand";
+
+        var origin = sources?.Value.GetOrigin(application);
+        return origin != null ? $"{origin.Repository}, revision {origin.Revision}" : $"local {ToolSource.FileName}";
     }
 
     public void Select(string application, string version)
     {
+        var installed = FindVersions(application);
+
         if (IsNotVersioned(application))
         {
             Console.WriteLine($"{application} is not versioned, there is no version to select");
@@ -201,30 +302,28 @@ public class ToolManager(
 
         if (string.IsNullOrWhiteSpace(version))
         {
-            var versions = toolDefinitionProvider.GetVersions(application).ToList();
-            if (!versions.Any())
-                return;
-
             // Newest first, so latest is next to the newest version and oldest next to the oldest one.
-            var choices = versions.Select(i => i.Manifest.Version).Reverse().Prepend(MetaVersion.Latest).Append(MetaVersion.Oldest).ToList();
+            var choices = installed.Select(i => i.Manifest.Version).Reverse().Prepend(MetaVersion.Latest).Append(MetaVersion.Oldest).ToList();
 
             for (var i = 0; i < choices.Count; i++)
                 Console.WriteLine($"[{i}] {choices[i]}");
-            Console.Write("Select version to use: ");
+            Console.Write("Select version to use (Enter keeps the current one): ");
             var input = Console.ReadLine();
 
-            if (!int.TryParse(input, out var selected))
-                throw new Exception($"'{input}' is not a valid index");
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                Console.WriteLine($"{application} still uses {FormatVersion(application, toolSettingsProvider.GetSettings(application).Version)}");
+                return;
+            }
 
-            if (selected < 0 || selected >= choices.Count)
-                throw new Exception("Selected index is out of range");
+            if (!int.TryParse(input, out var selected) || selected < 0 || selected >= choices.Count)
+                throw new InvalidOperationException($"`{input}` is not a number from 0 to {choices.Count - 1}");
 
             version = choices[selected];
         }
 
-        var toolDefinition = toolDefinitionProvider.GetVersion(application, version);
-        if (toolDefinition == null)
-            return;
+        var toolDefinition = toolDefinitionProvider.GetVersion(application, version)
+            ?? throw new InvalidOperationException($"Version {version} of {application} not found, installed: {installed.Select(i => i.Manifest.Version).Join(", ")}");
 
         toolSettingsProvider.UpdateSettings(application, s =>
         {
@@ -236,7 +335,19 @@ public class ToolManager(
 
     public void SetDisabled(string application, bool isDisabled)
     {
+        FindVersions(application);
         toolSettingsProvider.UpdateSettings(application, s => s.IsDisabled = isDisabled);
+        Console.WriteLine(isDisabled ? $"{application} is disabled, it is no longer on PATH" : $"{application} is enabled");
+    }
+
+    // The installed versions, an unknown application is an error instead of settings for nothing.
+    private List<ToolDefinition> FindVersions(string application)
+    {
+        var versions = toolDefinitionProvider.GetVersions(application);
+        if (versions.Count == 0)
+            throw new InvalidOperationException($"{application} not found, `ls` lists the applications and `sc` finds new ones");
+
+        return versions;
     }
 
     private string FormatVersion(string application, string version)
@@ -264,12 +375,13 @@ public class ToolManager(
     private string GetStatus(string application, ToolSettings toolSettings)
     {
         if (!toolDefinitionProvider.GetVersions(application).Any())
-            return "Orphaned";
+            return "orphaned";
 
         if (toolSettings.Version != null && toolDefinitionProvider.GetVersion(application, toolSettings.Version) == null)
-            return "Orphaned";
+            return "orphaned";
 
-        return toolSettings.IsDisabled ? "Disabled" : "Enabled";
+        // Enabled is the usual case, only what differs is worth a word.
+        return toolSettings.IsDisabled ? "disabled" : "";
     }
 
     private IEnumerable<ToolDefinition> GetTools()

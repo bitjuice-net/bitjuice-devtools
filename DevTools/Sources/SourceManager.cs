@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
-using ConsoleTables;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
 using DevTools.Installation;
@@ -17,8 +16,11 @@ public interface ISourceManager
 {
     void Add(string repository);
     void Remove(string repository);
-    void List();
+    void List(string repository);
     void Sync();
+
+    // Where the manifests of an application came from, null when they were not fetched from a source.
+    FetchedApp GetOrigin(string application);
 
     // Brings .app and .source of an application to the revision in the synced index, before it is installed or updated.
     // Returns true when a file changed.
@@ -76,23 +78,51 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         Console.WriteLine($"Removed {repository}, manifests fetched from it stay");
     }
 
-    public void List()
+    public void List(string repository)
     {
+        if (repository != null)
+        {
+            ListApplications(repository);
+            return;
+        }
+
         if (State.Repositories.Count == 0)
         {
             Console.WriteLine("No sources, add one with `source add owner/repo`");
             return;
         }
 
-        var table = new ConsoleTable("Repository", "Applications");
+        var table = new TextTable("REPOSITORY", "APPLICATIONS");
 
-        foreach (var repository in State.Repositories)
+        foreach (var source in State.Repositories)
         {
-            var index = TryGetIndex(repository, out var error);
-            table.AddRow(repository, index != null ? index.Apps.Keys.Join(", ") : $"unavailable: {error}");
+            var index = TryGetIndex(source, out var error);
+            table.AddRow(source, index != null ? index.Apps.Count.ToString() : $"unavailable: {error}");
         }
 
-        table.Write(Format.MarkDown);
+        table.Write();
+    }
+
+    private void ListApplications(string repository)
+    {
+        repository = Normalize(repository);
+        var source = State.Repositories.FirstOrDefault(i => Comparer.Equals(i, repository))
+            ?? throw new InvalidOperationException($"{repository} is not a source, see `source list`");
+
+        var table = new TextTable("APPLICATION", "REVISION", "FETCHED");
+
+        foreach (var (name, entry) in GetIndex(source).Apps)
+        {
+            var fetched = State.Apps.GetValueOrDefault(name);
+            table.AddRow(name, entry.Revision.ToString(), fetched != null && Comparer.Equals(fetched.Repository, source) ? fetched.Revision.ToString() : "");
+        }
+
+        table.Write();
+    }
+
+    public FetchedApp GetOrigin(string application)
+    {
+        return State.Apps.GetValueOrDefault(application);
     }
 
     public void Sync()
@@ -126,10 +156,6 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         var hasSource = directory != null && File.Exists(Path.Combine(directory, ToolSource.FileName));
         var fetched = State.Apps.GetValueOrDefault(application);
 
-        // Manifests written by hand, not fetched from a source, are not touched.
-        if (hasSource && fetched == null)
-            return false;
-
         var located = Locate(application);
         if (located == null)
         {
@@ -141,6 +167,15 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         }
 
         var (repository, entry) = located.Value;
+
+        // Manifests not fetched from a source are at their own revision, 1 when they have none,
+        // and a newer revision in a source replaces them. From then on the source manages the application.
+        if (hasSource && fetched == null)
+        {
+            var local = Math.Max(1, storage.Load<ToolSource>(Path.Combine(directory, ToolSource.FileName)).Revision);
+            return entry.Revision > local && Write(application, repository, entry.Revision, directory, replaceLocal: true);
+        }
+
         if (hasSource && Comparer.Equals(fetched.Repository, repository) && entry.Revision <= fetched.Revision)
             return false;
 
@@ -162,26 +197,38 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             throw new InvalidOperationException($"{ToolSource.FileName} in `{location}` needs a revision of 1 or more");
     }
 
-    // The repository the application was fetched from wins, then the first source that has it.
+    // The repository the application was fetched from keeps it. Otherwise the source with the newest revision wins,
+    // the first one of them when they are equal.
     private (string Repository, IndexEntry Entry)? Locate(string application)
     {
         var fetched = State.Apps.GetValueOrDefault(application)?.Repository;
-        var candidates = State.Repositories.OrderBy(i => Comparer.Equals(i, fetched) ? 0 : 1);
+        (string Repository, IndexEntry Entry)? newest = null;
 
-        foreach (var repository in candidates)
+        foreach (var repository in State.Repositories)
         {
             var index = TryGetIndex(repository, out var error);
             if (index == null)
+            {
                 Console.Error.WriteLine($"Skipped {repository}: {error}");
-            else if (index.Apps.TryGetValue(application, out var entry))
+                continue;
+            }
+
+            if (!index.Apps.TryGetValue(application, out var entry))
+                continue;
+
+            if (Comparer.Equals(repository, fetched))
                 return (repository, entry);
+
+            if (newest == null || entry.Revision > newest.Value.Entry.Revision)
+                newest = (repository, entry);
         }
 
-        return null;
+        return newest;
     }
 
-    // Replaces a local file only when it is still the one fetched before, so changes made by hand stay.
-    private bool Write(string application, string repository, int revision, string directory)
+    // Replaces a local file only when it is still the one fetched before, so changes made by hand stay,
+    // unless the local files were not fetched from a source at all.
+    private bool Write(string application, string repository, int revision, string directory, bool replaceLocal = false)
     {
         var files = ManifestFiles.ToDictionary(i => i, i => Download(repository, $"{application}/{i}")
             ?? throw new InvalidOperationException($"{repository} lists {application} but has no `{application}/{i}`, `source sync` gets its newest list"));
@@ -200,7 +247,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             var hash = Hash(content);
             var local = File.Exists(path) ? Hash(File.ReadAllBytes(path)) : null;
 
-            if (local != null && local != hash && local != fetched?.Hashes.GetValueOrDefault(file))
+            if (!replaceLocal && local != null && local != hash && local != fetched?.Hashes.GetValueOrDefault(file))
             {
                 kept.Add(path);
                 if (fetched?.Hashes.GetValueOrDefault(file) is { } previous)

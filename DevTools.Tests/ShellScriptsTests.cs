@@ -61,6 +61,7 @@ public class ShellScriptsTests
             "export DT_ENVS='JAVA_HOME GREETING'",
             "export DT_PATH='/a:/b'",
             "export PATH='/a:/b:/usr/bin'",
+            "export DT_STATE=''",
             "export DT_INITIALIZED='1'"
         }, setup.Split('\n'));
     }
@@ -77,6 +78,7 @@ public class ShellScriptsTests
             @"set ""DT_ENVS=ProgramFiles(x86)""",
             @"set ""DT_PATH=D:\a;D:\b""",
             @"set ""PATH=D:\a;D:\b;C:\Windows""",
+            @"set ""DT_STATE=""",
             @"set ""DT_INITIALIZED=1"""
         }, setup.Split("\r\n"));
     }
@@ -203,5 +205,25 @@ public class ShellScriptsTests
     public void RcLine_EvaluatesHook()
     {
         Assert.Equal("""eval "$('/opt/devtools' shell hook zsh)" """.TrimEnd(), ShellScripts.RcLine(Shell.Zsh, "/opt/devtools"));
+    }
+
+    [Theory]
+    [InlineData(Shell.Bash)]
+    [InlineData(Shell.Zsh)]
+    public void Hook_ReloadsOnlyWhenTheStateChanged(Shell shell)
+    {
+        var script = ShellScripts.Hook(shell, "/opt/devtools/devtools");
+
+        Assert.EndsWith(System.IO.Path.Combine("devtools", "data", "state"), ShellScripts.StateFile("/opt/devtools/devtools"));
+        Assert.Contains($"IFS= read -r state < '{ShellScripts.StateFile("/opt/devtools/devtools")}'", script);
+        Assert.Contains("[ \"$state\" = \"${DT_STATE-}\" ] || _dt_reload", script);
+    }
+
+    [Fact]
+    public void Env_SetsTheLoadedState()
+    {
+        var env = ShellScripts.Env(Shell.Bash, new[] { "/a" }, Array.Empty<KeyValuePair<string, string>>(), Env(("PATH", "/usr/bin")), "42");
+
+        Assert.Contains("export DT_STATE='42'", env);
     }
 }

@@ -131,6 +131,39 @@ public sealed class SourceManagerTests : IDisposable
         Assert.Equal(2, Fetched("age").Revision);
     }
 
+    [Theory]
+    [InlineData(1, 2, "other")]
+    [InlineData(2, 1, "repo")]
+    [InlineData(1, 1, "repo")]
+    public void Refresh_TakesTheNewestRevisionOfAllSources(int first, int second, string expected)
+    {
+        Manifest(repo, "age", first);
+        Index(repo);
+        Manifest(other, "age", second);
+        Index(other);
+        storage.Save("sources.json", new SourcesState { Repositories = new List<string> { repo, other } });
+
+        Refresh("age");
+
+        Assert.Equal(expected == "repo" ? repo : other, Fetched("age").Repository);
+    }
+
+    [Fact]
+    public void Refresh_StaysWithTheSourceTheApplicationCameFrom()
+    {
+        Manifest(repo, "age", 1);
+        Index(repo);
+        Refresh("age");
+        Manifest(other, "age", 5);
+        Index(other);
+        storage.Load<SourcesState>("sources.json").Repositories.Add(other);
+
+        Refresh("age");
+
+        Assert.Equal(repo, Fetched("age").Repository);
+        Assert.Equal(1, Fetched("age").Revision);
+    }
+
     [Fact]
     public void Refresh_FailsWhenNoSourceHasTheApplication()
     {
@@ -212,21 +245,26 @@ public sealed class SourceManagerTests : IDisposable
         Assert.Equal(2, Fetched("age").Revision);
     }
 
-    [Fact]
-    public void Refresh_LeavesManifestsWrittenByHand()
+    // Local manifests not fetched from a source count as their own revision, 1 when they have none.
+    [Theory]
+    [InlineData("", 1, false)]
+    [InlineData("", 2, true)]
+    [InlineData(""", "revision": 3""", 2, false)]
+    [InlineData(""", "revision": 3""", 4, true)]
+    public void Refresh_ReplacesLocalManifestsWithANewerRevision(string localRevision, int sourceRevision, bool replaced)
     {
         Directory.CreateDirectory(Path.Combine(root, "age"));
         File.WriteAllText(Local("age", ".app"), """{ "name": "age", "versioned": true }""");
-        File.WriteAllText(Local("age", ".source"), "{ \"mine\": true }");
-        Manifest(repo, "age", 1);
+        File.WriteAllText(Local("age", ".source"), $$"""{ "mine": true{{localRevision}} }""");
+        Manifest(repo, "age", sourceRevision);
         Index(repo);
 
         var changed = false;
         TestTools.CaptureConsole(() => changed = Next().Refresh("age"));
 
-        Assert.False(changed);
-        Assert.Contains("mine", File.ReadAllText(Local("age", ".source")));
-        Assert.Empty(client.Paths);
+        Assert.Equal(replaced, changed);
+        Assert.Equal(!replaced, File.ReadAllText(Local("age", ".source")).Contains("mine"));
+        Assert.Equal(replaced ? sourceRevision : null, Fetched("age")?.Revision);
     }
 
     [Fact]
@@ -269,5 +307,34 @@ public sealed class SourceManagerTests : IDisposable
     public void NewState_UsesDefaultRepository()
     {
         Assert.Equal(new[] { SourcesState.DefaultRepository }, new SourcesState().Repositories);
+    }
+
+    [Fact]
+    public void List_ShowsCountsAndTheApplicationsOfOneRepository()
+    {
+        Manifest(repo, "age", 2);
+        Manifest(repo, "java", 1);
+        Index(repo);
+        Refresh("age");
+
+        var all = TestTools.CaptureConsole(() => Next().List(null));
+        var one = TestTools.CaptureConsole(() => Next().List(repo));
+
+        Assert.Matches(@"(?m)^.*repo\s+2\s*$", all);
+        Assert.Matches(@"(?m)^age\s+2\s+2\s*$", one);
+        Assert.Matches(@"(?m)^java\s+1\s*$", one);
+    }
+
+    [Fact]
+    public void JsonStorage_SaveWritesANewState()
+    {
+        var storage = new JsonStorage();
+        storage.Save(Path.Combine(temp, "data", "tools.json"), new Dictionary<string, string>());
+        var first = JsonStorage.ReadState(Path.Combine(temp, "data"));
+        System.Threading.Thread.Sleep(1);
+        storage.Save(Path.Combine(temp, "data", "tools.json"), new Dictionary<string, string>());
+
+        Assert.NotEqual("", first);
+        Assert.NotEqual(first, JsonStorage.ReadState(Path.Combine(temp, "data")));
     }
 }

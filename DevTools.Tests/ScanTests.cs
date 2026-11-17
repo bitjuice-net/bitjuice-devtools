@@ -207,9 +207,9 @@ public sealed class ScanTests : IDisposable
         if (selected != null)
             settings.UpdateSettings("bin", s => s.Version = selected);
 
-        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("| bin"));
+        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("bin "));
 
-        Assert.Equal(new[] { "bin", "default", "default", "Enabled" }, row.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        Assert.Equal(new[] { "bin", "-", "-" }, row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
     }
 

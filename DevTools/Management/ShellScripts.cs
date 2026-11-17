@@ -15,6 +15,9 @@ public static partial class ShellScripts
     public const string EnvsVariable = "DT_ENVS";
     public const string InitializedVariable = "DT_INITIALIZED";
 
+    // The stamp of data/state the shell last loaded, `dt` reloads only when the file has another one.
+    public const string StateVariable = "DT_STATE";
+
     // Windows only has cmd integration. Elsewhere $SHELL is the login shell of the user, the one their terminals start.
     // The parent process is not used, it is sudo, an IDE or a script as often as the shell.
     public static Shell Detect(bool isWindows, Func<string, string> getEnv)
@@ -33,7 +36,7 @@ public static partial class ShellScripts
 
     // The PATH from before devtools is kept in DT_BASEPATH, so every reload builds PATH from scratch.
     // Selected tools go first, so they win over the system ones.
-    public static string Env(Shell shell, IEnumerable<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, Func<string, string> getEnv)
+    public static string Env(Shell shell, IEnumerable<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, Func<string, string> getEnv, string state = "")
     {
         var separator = shell == Shell.Cmd ? ';' : ':';
         var basePath = new[] { getEnv(BasePathVariable), getEnv("PATH") }.FirstOrDefault(i => !string.IsNullOrEmpty(i)) ?? "";
@@ -56,6 +59,7 @@ public static partial class ShellScripts
         lines.Add(Set(shell, EnvsVariable, names.Join(' ')));
         lines.Add(Set(shell, "DT_PATH", toolPath));
         lines.Add(Set(shell, "PATH", new[] { toolPath, basePath }.Where(i => i.Length > 0).Join(separator)));
+        lines.Add(Set(shell, StateVariable, state));
         lines.Add(Set(shell, InitializedVariable, "1"));
 
         return lines.Join(shell == Shell.Cmd ? "\r\n" : "\n");
@@ -70,6 +74,7 @@ public static partial class ShellScripts
 
         var exe = Quote(executable);
         var name = Name(shell);
+        var stateFile = Quote(StateFile(executable));
 
         return $$"""
             _dt_reload() {
@@ -80,13 +85,19 @@ public static partial class ShellScripts
 
             dt() {
               {{exe}} "$@"
-              local result=$?
-              _dt_reload
+              local result=$? state=
+              [ -r {{stateFile}} ] && IFS= read -r state < {{stateFile}}
+              [ "$state" = "${{{StateVariable}}-}" ] || _dt_reload
               return $result
             }
 
             _dt_reload
             """.ReplaceLineEndings("\n");
+    }
+
+    public static string StateFile(string executable)
+    {
+        return Path.Combine(Path.GetDirectoryName(executable) ?? "", PathUtils.DataDirectoryName, JsonStorage.StateFileName);
     }
 
     public static string RcLine(Shell shell, string executable)

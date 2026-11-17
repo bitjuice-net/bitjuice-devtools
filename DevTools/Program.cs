@@ -1,5 +1,6 @@
 ﻿using System;
 using System.CommandLine;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using DevTools.Catalog;
@@ -17,6 +18,10 @@ internal class Program
 {
     private static int Main(string[] args)
     {
+        // Help and parser messages in English like the rest of devtools, not in the language of the system.
+        CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
+        CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
+
         var config = new ConfigurationBuilder()
             .AddJsonFile(Path.Combine(PathUtils.DataDirectoryName, "settings.json"), optional: true)
             .Build();
