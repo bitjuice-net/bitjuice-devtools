@@ -48,11 +48,11 @@ public static class ShellScripts
     }
 
     // cmd: the AutoRun command. DT_INITIALIZED goes first, because for /f runs its command in a nested cmd that runs AutoRun too.
-    // bash and zsh: sourced by `eval "$(devtools init bash)"`, a function is needed because a child process cannot change the shell.
+    // bash and zsh: sourced by `eval "$(devtools shell init bash)"`, a function is needed because a child process cannot change the shell.
     public static string Init(Shell shell, string executable)
     {
         if (shell == Shell.Cmd)
-            return $"""if not defined {InitializedVariable} (set "{InitializedVariable}=1" & for /f "delims=" %i in ('""{executable}" setup --shell cmd"') do @%i)""";
+            return $"""if not defined {InitializedVariable} (set "{InitializedVariable}=1" & for /f "delims=" %i in ('""{executable}" shell setup cmd"') do @%i)""";
 
         var exe = Quote(executable);
         var name = Name(shell);
@@ -60,7 +60,7 @@ public static class ShellScripts
         return $$"""
             _dt_reload() {
               local setup
-              setup="$({{exe}} setup --shell {{name}})" || return
+              setup="$({{exe}} shell setup {{name}})" || return
               eval "$setup"
             }
 
@@ -77,7 +77,7 @@ public static class ShellScripts
 
     public static string RcLine(Shell shell, string executable)
     {
-        return $"eval \"$({Quote(executable)} init {Name(shell)})\"";
+        return $"eval \"$({Quote(executable)} shell init {Name(shell)})\"";
     }
 
     public static string RcFile(Shell shell, Func<string, string> getEnv)
@@ -113,7 +113,7 @@ public static class ShellScripts
         return others.Trim().Trim('&').Trim();
     }
 
-    // Removes the lines added by `init --install`, including ones that point to another devtools location.
+    // Removes the lines added by `shell install`, including ones that point to another devtools location.
     public static string RemoveFromRc(string content, Shell shell)
     {
         var lineEnding = content.Contains("\r\n") ? "\r\n" : "\n";

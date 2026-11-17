@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.Versioning;
 using Microsoft.Win32;
 
 namespace DevTools.Management;
@@ -11,20 +12,25 @@ public static class ShellInstaller
 
     public static void Install(Shell shell, string executable)
     {
-        if (shell == Shell.Cmd)
+        if (shell != Shell.Cmd)
+            InstallRc(shell, executable);
+        else if (OperatingSystem.IsWindows())
             InstallCmd(executable);
         else
-            InstallRc(shell, executable);
+            throw CmdNotSupported();
     }
 
     public static void Uninstall(Shell shell)
     {
-        if (shell == Shell.Cmd)
+        if (shell != Shell.Cmd)
+            UninstallRc(shell);
+        else if (OperatingSystem.IsWindows())
             UninstallCmd();
         else
-            UninstallRc(shell);
+            throw CmdNotSupported();
     }
 
+    [SupportedOSPlatform("windows")]
     private static void InstallCmd(string executable)
     {
         using var key = OpenCommandProcessor();
@@ -37,6 +43,7 @@ public static class ShellInstaller
         Console.WriteLine($@"Set HKCU\{CommandProcessorKey}\{AutoRunValue}, open a new console to use it");
     }
 
+    [SupportedOSPlatform("windows")]
     private static void UninstallCmd()
     {
         using var key = OpenCommandProcessor();
@@ -57,12 +64,15 @@ public static class ShellInstaller
         Console.WriteLine($"Removed devtools from AutoRun, open a new console to use it. Previous AutoRun: {existing}");
     }
 
+    [SupportedOSPlatform("windows")]
     private static RegistryKey OpenCommandProcessor()
     {
-        if (!OperatingSystem.IsWindows())
-            throw new InvalidOperationException("cmd integration is only available on Windows");
-
         return Registry.CurrentUser.CreateSubKey(CommandProcessorKey);
+    }
+
+    private static InvalidOperationException CmdNotSupported()
+    {
+        return new InvalidOperationException("cmd integration is only available on Windows");
     }
 
     private static void InstallRc(Shell shell, string executable)

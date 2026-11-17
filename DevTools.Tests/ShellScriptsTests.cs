@@ -111,7 +111,7 @@ public class ShellScriptsTests
     {
         var script = ShellScripts.Init(shell, "/opt/dev tools/devtools");
 
-        Assert.Contains($"setup=\"$('/opt/dev tools/devtools' setup --shell {name})\"", script);
+        Assert.Contains($"setup=\"$('/opt/dev tools/devtools' shell setup {name})\"", script);
         Assert.Contains("dt() {", script);
         Assert.DoesNotContain("\r", script);
     }
@@ -121,7 +121,7 @@ public class ShellScriptsTests
     {
         var command = ShellScripts.Init(Shell.Cmd, @"C:\Program Files\devtools\devtools.exe");
 
-        Assert.Equal("""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & for /f "delims=" %i in ('""C:\Program Files\devtools\devtools.exe" setup --shell cmd"') do @%i)""", command);
+        Assert.Equal("""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & for /f "delims=" %i in ('""C:\Program Files\devtools\devtools.exe" shell setup cmd"') do @%i)""", command);
     }
 
     [Theory]
@@ -177,6 +177,6 @@ public class ShellScriptsTests
     [Fact]
     public void RcLine_EvaluatesInit()
     {
-        Assert.Equal("""eval "$('/opt/devtools' init zsh)" """.TrimEnd(), ShellScripts.RcLine(Shell.Zsh, "/opt/devtools"));
+        Assert.Equal("""eval "$('/opt/devtools' shell init zsh)" """.TrimEnd(), ShellScripts.RcLine(Shell.Zsh, "/opt/devtools"));
     }
 }
