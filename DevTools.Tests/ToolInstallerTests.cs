@@ -56,7 +56,7 @@ public sealed class ToolInstallerTests : IDisposable
     {
         definitions = new ToolDefinitionProvider(storage);
         settings = new ToolSettingsProvider(storage, definitions);
-        manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, new ToolInstaller(storage, versions, downloader));
+        manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, new Lazy<IToolInstaller>(() => new ToolInstaller(storage, versions, downloader)));
         appDir = Path.Combine(root, "app");
         Directory.CreateDirectory(appDir);
         File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app", "versioned": true, "paths": ["%APPDIR%"] }""");

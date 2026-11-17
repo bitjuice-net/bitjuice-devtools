@@ -10,15 +10,18 @@ using Microsoft.Extensions.Options;
 namespace DevTools.Management;
 
 public class ToolManager(
-    IOptions<Settings> settings,
+    IOptions<Settings> options,
     IToolDefinitionProvider toolDefinitionProvider,
     IToolSettingsProvider toolSettingsProvider,
-    IToolInstaller toolInstaller)
+    Lazy<IToolInstaller> installer)
     : IToolManager
 {
     private const string NotSetConst = "<not set>";
 
-    private readonly Settings settings = settings.Value;
+    private readonly Settings settings = options.Value;
+
+    // Created on first use, only install, update and remove download anything.
+    private IToolInstaller toolInstaller => installer.Value;
 
     public void GetEnv(Shell shell)
     {

@@ -46,12 +46,14 @@ internal class Program
         services.AddSingleton<IToolManager, ToolManager>();
         services.AddSingleton<IToolDefinitionProvider, ToolDefinitionProvider>();
         services.AddSingleton<IToolSettingsProvider, ToolSettingsProvider>();
-        services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromMinutes(30) });
+        // Created on first use: only install, update and remove download anything, and devtools runs on every console start.
+        services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(30) });
         services.AddSingleton<GitHubVersionSource>();
         services.AddSingleton<WebPageVersionSource>();
         services.AddSingleton<IVersionSource, VersionSourceRouter>();
         services.AddSingleton<IDownloader, HttpDownloader>();
         services.AddSingleton<IToolInstaller, ToolInstaller>();
+        services.AddSingleton(provider => new Lazy<IToolInstaller>(provider.GetRequiredService<IToolInstaller>));
 
         return services.BuildServiceProvider();
     }

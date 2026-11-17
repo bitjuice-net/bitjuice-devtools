@@ -9,7 +9,7 @@ namespace DevTools.Management;
 
 // Every shell works the same way: `shell env` prints commands that set PATH and variables, the shell runs them.
 // The logic stays here, so the shells only differ in syntax.
-public static class ShellScripts
+public static partial class ShellScripts
 {
     public const string BasePathVariable = "DT_BASEPATH";
     public const string EnvsVariable = "DT_ENVS";
@@ -182,7 +182,13 @@ public static class ShellScripts
     private static bool IsName(Shell shell, string name)
     {
         return shell == Shell.Cmd
-            ? Regex.IsMatch(name, """^[^\s="%!^&|<>]+$""")
-            : Regex.IsMatch(name, "^[A-Za-z_][A-Za-z0-9_]*$");
+            ? CmdName().IsMatch(name)
+            : PosixName().IsMatch(name);
     }
+
+    [GeneratedRegex("""^[^\s="%!^&|<>]+$""")]
+    private static partial Regex CmdName();
+
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
+    private static partial Regex PosixName();
 }

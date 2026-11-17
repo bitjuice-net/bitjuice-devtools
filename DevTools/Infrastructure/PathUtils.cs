@@ -1,12 +1,11 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 
 namespace DevTools.Infrastructure;
 
 public class PathUtils
 {
-    public static string AssemblyDirectory => Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty);
+    public static string AssemblyDirectory => Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty);
 
     public static string GetRootedPath(string path)
     {

@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace DevTools.Infrastructure;
 
@@ -10,7 +11,8 @@ public class JsonStorage : IStorage
         AllowOutOfOrderMetadataProperties = true,
         PropertyNameCaseInsensitive = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
+        WriteIndented = true,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(StorageJsonContext.Default, new DefaultJsonTypeInfoResolver())
     };
 
     public T Load<T>(string fileName) where T : new()
