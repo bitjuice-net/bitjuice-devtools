@@ -35,7 +35,7 @@ public static class ShellInstaller
     {
         using var key = OpenCommandProcessor();
         var existing = key.GetValue(AutoRunValue) as string;
-        var command = ShellScripts.MergeAutoRun(existing, ShellScripts.Init(Shell.Cmd, executable));
+        var command = ShellScripts.MergeAutoRun(existing, ShellScripts.Hook(Shell.Cmd, executable));
 
         key.SetValue(AutoRunValue, command, RegistryValueKind.String);
         if (!string.IsNullOrWhiteSpace(existing) && existing != command)

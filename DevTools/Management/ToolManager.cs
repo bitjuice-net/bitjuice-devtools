@@ -20,7 +20,7 @@ public class ToolManager(
 
     private readonly Settings settings = settings.Value;
 
-    public void GetSetup(Shell shell)
+    public void GetEnv(Shell shell)
     {
         var pathBuilder = new PathBuilder();
         var envsBuilder = new EnvsBuilder();
@@ -34,37 +34,17 @@ public class ToolManager(
         // devtools itself (and dt.cmd next to it) stays on PATH after the tools.
         var paths = pathBuilder.Values.Append(PathUtils.AssemblyDirectory);
 
-        Console.WriteLine(ShellScripts.Setup(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable));
+        Console.WriteLine(ShellScripts.Env(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable));
     }
 
-    public void GetPath()
+    public void Scan()
     {
-        var builder = new PathBuilder();
-
-        foreach (var version in GetTools())
-            builder.AddApplication(version);
-
-        Console.WriteLine(builder.Build());
-    }
-
-    public void GetEnvs()
-    {
-        var builder = new EnvsBuilder();
-
-        foreach (var version in GetTools())
-            builder.AddApplication(version);
-
-        Console.WriteLine(builder.Build());
-    }
-
-    public void Discover()
-    {
-        toolDefinitionProvider.Discover(PathUtils.GetRootedPath(settings.RootPath));
+        toolDefinitionProvider.Scan(PathUtils.GetRootedPath(settings.RootPath));
     }
 
     public void Prune()
     {
-        Discover();
+        Scan();
 
         var pruned = 0;
 
@@ -94,7 +74,7 @@ public class ToolManager(
 
     public void Install(string application, string version)
     {
-        Discover();
+        Scan();
 
         var directory = toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
         var available = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult();
@@ -117,7 +97,7 @@ public class ToolManager(
 
     public void Update(string application)
     {
-        Discover();
+        Scan();
 
         var directory = toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
         var newest = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult().FirstOrDefault();
@@ -138,7 +118,7 @@ public class ToolManager(
 
     public void Remove(string application, string version)
     {
-        Discover();
+        Scan();
 
         var definition = toolDefinitionProvider.GetVersions(application).SingleOrDefault(i => VersionNumber.AreEqual(i.Manifest.Version, version));
 
@@ -154,7 +134,7 @@ public class ToolManager(
             throw new InvalidOperationException($"{application} {version} is selected, use `select {application}` to switch to another version first");
 
         toolInstaller.Remove(definition.Path);
-        Discover();
+        Scan();
 
         Console.WriteLine($"Removed {application} {version} from {definition.Path}");
         Console.WriteLine(toolDefinitionProvider.GetVersions(application).Any()
@@ -165,7 +145,7 @@ public class ToolManager(
     private void InstallVersion(string application, string directory, RemoteVersion target)
     {
         var path = toolInstaller.InstallAsync(directory, target).GetAwaiter().GetResult();
-        Discover();
+        Scan();
 
         Console.WriteLine($"Installed {application} {target.Version} in {path}");
 

@@ -7,7 +7,7 @@ using DevTools.Infrastructure;
 
 namespace DevTools.Management;
 
-// Every shell works the same way: `setup` prints commands that set PATH and variables, the shell runs them.
+// Every shell works the same way: `shell env` prints commands that set PATH and variables, the shell runs them.
 // The logic stays here, so the shells only differ in syntax.
 public static class ShellScripts
 {
@@ -15,11 +15,9 @@ public static class ShellScripts
     public const string EnvsVariable = "DT_ENVS";
     public const string InitializedVariable = "DT_INITIALIZED";
 
-    public static Shell Default => OperatingSystem.IsWindows() ? Shell.Cmd : Shell.Bash;
-
     // The PATH from before devtools is kept in DT_BASEPATH, so every reload builds PATH from scratch.
     // Selected tools go first, so they win over the system ones.
-    public static string Setup(Shell shell, IEnumerable<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, Func<string, string> getEnv)
+    public static string Env(Shell shell, IEnumerable<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, Func<string, string> getEnv)
     {
         var separator = shell == Shell.Cmd ? ';' : ':';
         var basePath = new[] { getEnv(BasePathVariable), getEnv("PATH") }.FirstOrDefault(i => !string.IsNullOrEmpty(i)) ?? "";
@@ -48,20 +46,20 @@ public static class ShellScripts
     }
 
     // cmd: the AutoRun command. DT_INITIALIZED goes first, because for /f runs its command in a nested cmd that runs AutoRun too.
-    // bash and zsh: sourced by `eval "$(devtools shell init bash)"`, a function is needed because a child process cannot change the shell.
-    public static string Init(Shell shell, string executable)
+    // bash and zsh: sourced by `eval "$(devtools shell hook bash)"`, a function is needed because a child process cannot change the shell.
+    public static string Hook(Shell shell, string executable)
     {
         if (shell == Shell.Cmd)
-            return $"""if not defined {InitializedVariable} (set "{InitializedVariable}=1" & for /f "delims=" %i in ('""{executable}" shell setup cmd"') do @%i)""";
+            return $"""if not defined {InitializedVariable} (set "{InitializedVariable}=1" & for /f "delims=" %i in ('""{executable}" shell env cmd"') do @%i)""";
 
         var exe = Quote(executable);
         var name = Name(shell);
 
         return $$"""
             _dt_reload() {
-              local setup
-              setup="$({{exe}} shell setup {{name}})" || return
-              eval "$setup"
+              local env
+              env="$({{exe}} shell env {{name}})" || return
+              eval "$env"
             }
 
             dt() {
@@ -77,7 +75,7 @@ public static class ShellScripts
 
     public static string RcLine(Shell shell, string executable)
     {
-        return $"eval \"$({Quote(executable)} shell init {Name(shell)})\"";
+        return $"eval \"$({Quote(executable)} shell hook {Name(shell)})\"";
     }
 
     public static string RcFile(Shell shell, Func<string, string> getEnv)
@@ -113,11 +111,12 @@ public static class ShellScripts
         return others.Trim().Trim('&').Trim();
     }
 
-    // Removes the lines added by `shell install`, including ones that point to another devtools location.
+    // Removes the lines added by `shell install`, including ones that point to another devtools location
+    // and the `init` lines of earlier versions.
     public static string RemoveFromRc(string content, Shell shell)
     {
         var lineEnding = content.Contains("\r\n") ? "\r\n" : "\n";
-        var rcLine = new Regex($"""^\s*eval "\$\(.*devtools.*init {Name(shell)}\)"\s*$""");
+        var rcLine = new Regex($"""^\s*eval "\$\(.*devtools.*(hook|init) {Name(shell)}\)"\s*$""");
         var kept = new List<string>();
 
         foreach (var line in content.Split(lineEnding))

@@ -29,7 +29,7 @@
     </None>
   </ItemGroup>
 
-  <!-- cmd.exe has no functions, so `dt` is a script, other shells use `devtools shell init bash|zsh`. -->
+  <!-- cmd.exe has no functions, so `dt` is a script, other shells use `devtools shell hook bash|zsh`. -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">
     <None Update="dt.cmd">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>

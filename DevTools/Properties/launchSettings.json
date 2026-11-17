@@ -8,9 +8,9 @@
       "commandName": "Project",
       "commandLineArgs": "ls"
     },
-    "DevTools Discover": {
+    "DevTools Scan": {
       "commandName": "Project",
-      "commandLineArgs": "discover"
+      "commandLineArgs": "sc"
     }
   }
 }

@@ -2,10 +2,8 @@
 
 public interface IToolManager
 {
-    void GetSetup(Shell shell);
-    void GetPath();
-    void GetEnvs();
-    void Discover();
+    void GetEnv(Shell shell);
+    void Scan();
     void Prune();
     void Install(string application, string version);
     void Update(string application);

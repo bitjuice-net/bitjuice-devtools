@@ -61,14 +61,14 @@ public class MetaVersionTests
     }
 
     [Fact]
-    public void GetPath_FollowsNewVersionWhenCacheChanges()
+    public void Env_FollowsNewVersionWhenCacheChanges()
     {
         TestTools.CaptureConsole(() => manager.Select("node", "latest"));
-        Assert.Contains(@"C:\Tools\node\24.11.1", TestTools.CaptureConsole(manager.GetPath));
+        Assert.Contains(@"C:\Tools\node\24.11.1", TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
 
         storage.Load<Dictionary<string, List<ToolDefinition>>>(TestTools.CacheFile)["node"].Add(TestTools.Definition("node", "25.0.0"));
 
-        Assert.Contains(@"C:\Tools\node\25.0.0", TestTools.CaptureConsole(manager.GetPath));
+        Assert.Contains(@"C:\Tools\node\25.0.0", TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
     }
 
     [Fact]

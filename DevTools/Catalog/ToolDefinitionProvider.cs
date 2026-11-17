@@ -50,7 +50,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         };
     }
 
-    public void Discover(string root)
+    public void Scan(string root)
     {
         if (root == null) 
             throw new ArgumentNullException(nameof(root));

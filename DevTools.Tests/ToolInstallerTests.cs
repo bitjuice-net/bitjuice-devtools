@@ -190,7 +190,7 @@ public sealed class ToolInstallerTests : IDisposable
     {
         Source("""[ { "type": "download", "asset": "app-{version}.zip", "to": "a.bin" } ]""");
         Directory.CreateDirectory(Installed("1.0.0"));
-        definitions.Discover(root);
+        definitions.Scan(root);
         settings.UpdateSettings("app", s => s.Version = "1.0.0");
         Remote("2.0.0", new byte[] { 1 });
 
@@ -421,7 +421,7 @@ public sealed class ToolInstallerTests : IDisposable
     public void Update_KeepsSelectedVersion()
     {
         Directory.CreateDirectory(Installed("1.0.0"));
-        definitions.Discover(root);
+        definitions.Scan(root);
         settings.UpdateSettings("app", s => s.Version = "1.0.0");
         Remote("2.0.0", new byte[] { 1 });
 
@@ -465,7 +465,7 @@ public sealed class ToolInstallerTests : IDisposable
     {
         InstalledFile("1.0.0");
         InstalledFile("2.0.0");
-        definitions.Discover(root);
+        definitions.Scan(root);
         settings.UpdateSettings("app", s => s.Version = "latest");
 
         Remove("2.0.0");
@@ -491,7 +491,7 @@ public sealed class ToolInstallerTests : IDisposable
     {
         var file = InstalledFile("1.0.0");
         InstalledFile("2.0.0");
-        definitions.Discover(root);
+        definitions.Scan(root);
         settings.UpdateSettings("app", s => s.Version = "1.0.0");
 
         var error = Assert.Throws<InvalidOperationException>(() => Remove("1.0.0"));
@@ -727,7 +727,7 @@ public sealed class ToolInstallerTests : IDisposable
     {
         InstalledFile("1.2.0");
         InstalledFile("2.0.0");
-        definitions.Discover(root);
+        definitions.Scan(root);
         settings.UpdateSettings("app", s => s.Version = "1.2.0");
 
         Assert.Throws<InvalidOperationException>(() => Remove("1.2"));
@@ -739,7 +739,7 @@ public sealed class ToolInstallerTests : IDisposable
     public void Select_StoresInstalledNameOfTheVersion()
     {
         Directory.CreateDirectory(Installed("1.2.0"));
-        definitions.Discover(root);
+        definitions.Scan(root);
 
         TestTools.CaptureConsole(() => manager.Select("app", "1.2"));
 

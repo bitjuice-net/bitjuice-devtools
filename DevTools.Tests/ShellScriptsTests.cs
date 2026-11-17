@@ -24,9 +24,9 @@ public class ShellScriptsTests
     [Theory]
     [InlineData(Shell.Bash)]
     [InlineData(Shell.Zsh)]
-    public void Setup_PosixShellsExportQuotedValuesAndPutToolsFirst(Shell shell)
+    public void Env_PosixShellsExportQuotedValuesAndPutToolsFirst(Shell shell)
     {
-        var setup = ShellScripts.Setup(shell, new[] { "/a", "/b" }, Envs, Env(("PATH", "/usr/bin")));
+        var setup = ShellScripts.Env(shell, new[] { "/a", "/b" }, Envs, Env(("PATH", "/usr/bin")));
 
         Assert.Equal(new[]
         {
@@ -41,9 +41,9 @@ public class ShellScriptsTests
     }
 
     [Fact]
-    public void Setup_CmdSetsQuotedAssignments()
+    public void Env_CmdSetsQuotedAssignments()
     {
-        var setup = ShellScripts.Setup(Shell.Cmd, new[] { @"D:\a", @"D:\b" }, new KeyValuePair<string, string>[] { new("ProgramFiles(x86)", "x & y") }, Env(("PATH", @"C:\Windows")));
+        var setup = ShellScripts.Env(Shell.Cmd, new[] { @"D:\a", @"D:\b" }, new KeyValuePair<string, string>[] { new("ProgramFiles(x86)", "x & y") }, Env(("PATH", @"C:\Windows")));
 
         Assert.Equal(new[]
         {
@@ -59,18 +59,18 @@ public class ShellScriptsTests
     [Theory]
     [InlineData(Shell.Cmd)]
     [InlineData(Shell.Bash)]
-    public void Setup_RebuildsPathFromBasePath(Shell shell)
+    public void Env_RebuildsPathFromBasePath(Shell shell)
     {
-        var setup = ShellScripts.Setup(shell, new[] { "new" }, Array.Empty<KeyValuePair<string, string>>(), Env(("PATH", "old;base"), ("DT_BASEPATH", "base")));
+        var setup = ShellScripts.Env(shell, new[] { "new" }, Array.Empty<KeyValuePair<string, string>>(), Env(("PATH", "old;base"), ("DT_BASEPATH", "base")));
 
         Assert.Contains(shell == Shell.Cmd ? @"set ""PATH=new;base""" : "export PATH='new:base'", setup);
         Assert.DoesNotContain("old", setup);
     }
 
     [Fact]
-    public void Setup_EmptyBasePathFallsBackToPath()
+    public void Env_EmptyBasePathFallsBackToPath()
     {
-        var setup = ShellScripts.Setup(Shell.Bash, new[] { "/a" }, Array.Empty<KeyValuePair<string, string>>(), Env(("PATH", "/usr/bin"), ("DT_BASEPATH", "")));
+        var setup = ShellScripts.Env(Shell.Bash, new[] { "/a" }, Array.Empty<KeyValuePair<string, string>>(), Env(("PATH", "/usr/bin"), ("DT_BASEPATH", "")));
 
         Assert.Contains("export PATH='/a:/usr/bin'", setup);
     }
@@ -78,9 +78,9 @@ public class ShellScriptsTests
     [Theory]
     [InlineData(Shell.Cmd, @"set ""OLD=""")]
     [InlineData(Shell.Bash, "unset OLD")]
-    public void Setup_UnsetsVariablesNoLongerSet(Shell shell, string unset)
+    public void Env_UnsetsVariablesNoLongerSet(Shell shell, string unset)
     {
-        var setup = ShellScripts.Setup(shell, Array.Empty<string>(), Envs, Env(("PATH", "p"), ("DT_ENVS", "OLD JAVA_HOME")));
+        var setup = ShellScripts.Env(shell, Array.Empty<string>(), Envs, Env(("PATH", "p"), ("DT_ENVS", "OLD JAVA_HOME")));
 
         Assert.Contains(unset, setup);
         Assert.DoesNotContain("JAVA_HOME=\"", setup);
@@ -91,11 +91,11 @@ public class ShellScriptsTests
     [InlineData(Shell.Bash, "ProgramFiles(x86)", "x")]
     [InlineData(Shell.Cmd, "QUOTED", "a\"b")]
     [InlineData(Shell.Cmd, "MULTILINE", "a\nb")]
-    public void Setup_SkipsVariablesTheShellCannotSet(Shell shell, string key, string value)
+    public void Env_SkipsVariablesTheShellCannotSet(Shell shell, string key, string value)
     {
         var output = TestTools.CaptureError(() =>
         {
-            var setup = ShellScripts.Setup(shell, Array.Empty<string>(), new KeyValuePair<string, string>[] { new(key, value), new("OK", "y") }, Env());
+            var setup = ShellScripts.Env(shell, Array.Empty<string>(), new KeyValuePair<string, string>[] { new(key, value), new("OK", "y") }, Env());
 
             Assert.DoesNotContain(key, setup);
             Assert.Contains("OK", setup);
@@ -107,21 +107,21 @@ public class ShellScriptsTests
     [Theory]
     [InlineData(Shell.Bash, "bash")]
     [InlineData(Shell.Zsh, "zsh")]
-    public void Init_PosixShellsDefineDtAndReload(Shell shell, string name)
+    public void Hook_PosixShellsDefineDtAndReload(Shell shell, string name)
     {
-        var script = ShellScripts.Init(shell, "/opt/dev tools/devtools");
+        var script = ShellScripts.Hook(shell, "/opt/dev tools/devtools");
 
-        Assert.Contains($"setup=\"$('/opt/dev tools/devtools' shell setup {name})\"", script);
+        Assert.Contains($"env=\"$('/opt/dev tools/devtools' shell env {name})\"", script);
         Assert.Contains("dt() {", script);
         Assert.DoesNotContain("\r", script);
     }
 
     [Fact]
-    public void Init_CmdMarksInitializedBeforeRunningSetup()
+    public void Hook_CmdMarksInitializedBeforeRunningEnv()
     {
-        var command = ShellScripts.Init(Shell.Cmd, @"C:\Program Files\devtools\devtools.exe");
+        var command = ShellScripts.Hook(Shell.Cmd, @"C:\Program Files\devtools\devtools.exe");
 
-        Assert.Equal("""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & for /f "delims=" %i in ('""C:\Program Files\devtools\devtools.exe" shell setup cmd"') do @%i)""", command);
+        Assert.Equal("""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & for /f "delims=" %i in ('""C:\Program Files\devtools\devtools.exe" shell env cmd"') do @%i)""", command);
     }
 
     [Theory]
@@ -175,8 +175,8 @@ public class ShellScriptsTests
     }
 
     [Fact]
-    public void RcLine_EvaluatesInit()
+    public void RcLine_EvaluatesHook()
     {
-        Assert.Equal("""eval "$('/opt/devtools' shell init zsh)" """.TrimEnd(), ShellScripts.RcLine(Shell.Zsh, "/opt/devtools"));
+        Assert.Equal("""eval "$('/opt/devtools' shell hook zsh)" """.TrimEnd(), ShellScripts.RcLine(Shell.Zsh, "/opt/devtools"));
     }
 }
