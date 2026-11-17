@@ -86,6 +86,17 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         return directory.FullName;
     }
 
+    // The directory with the .app of the application, null when there is none.
+    public string FindDirectory(string root, string application)
+    {
+        var directories = Scan(new DirectoryInfo(root)).Where(i => i.Manifest.Name == application).ToList();
+
+        if (directories.Count > 1)
+            throw new InvalidOperationException($"More than one `{ManifestFileName}` file found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
+
+        return directories.SingleOrDefault().Directory?.FullName;
+    }
+
     private IEnumerable<(DirectoryInfo Directory, ToolManifest Manifest)> Scan(DirectoryInfo directory)
     {
         var manifestPath = Path.Combine(directory.FullName, ManifestFileName);

@@ -125,6 +125,9 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         var fileName = Path.Combine(directory, ToolSource.FileName);
         var source = storage.Load<ToolSource>(fileName);
 
+        if (source.Format > ToolSource.SupportedFormat)
+            throw new InvalidOperationException($"`{fileName}` has format {source.Format}, this devtools supports up to {ToolSource.SupportedFormat}, update devtools");
+
         if (source.Versions == null)
             throw new InvalidOperationException($"`{fileName}` does not define versions");
 

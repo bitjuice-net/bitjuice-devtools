@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using ConsoleTables;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
 using DevTools.Installation;
+using DevTools.Sources;
 using Microsoft.Extensions.Options;
 
 namespace DevTools.Management;
@@ -13,7 +15,8 @@ public class ToolManager(
     IOptions<Settings> options,
     IToolDefinitionProvider toolDefinitionProvider,
     IToolSettingsProvider toolSettingsProvider,
-    Lazy<IToolInstaller> installer)
+    Lazy<IToolInstaller> installer,
+    Lazy<ISourceManager> sources = null)
     : IToolManager
 {
     private const string NotSetConst = "<not set>";
@@ -79,7 +82,7 @@ public class ToolManager(
     {
         Scan();
 
-        var directory = toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
+        var directory = FindOrFetchSourceDirectory(application);
         var available = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult();
 
         var target = version == MetaVersion.Latest
@@ -102,7 +105,7 @@ public class ToolManager(
     {
         Scan();
 
-        var directory = toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
+        var directory = FindOrFetchSourceDirectory(application);
         var newest = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult().FirstOrDefault();
 
         if (newest == null)
@@ -143,6 +146,21 @@ public class ToolManager(
         Console.WriteLine(toolDefinitionProvider.GetVersions(application).Any()
             ? $"{application} uses {FormatVersion(application, selected)}"
             : $"{application} has no installed versions left");
+    }
+
+    // An application without a local .source gets its manifests from the sources first.
+    private string FindOrFetchSourceDirectory(string application)
+    {
+        var root = PathUtils.GetRootedPath(settings.RootPath);
+        var directory = toolDefinitionProvider.FindDirectory(root, application);
+
+        if (sources != null && (directory == null || !File.Exists(Path.Combine(directory, ToolSource.FileName))))
+        {
+            sources.Value.Fetch(application);
+            Scan();
+        }
+
+        return toolDefinitionProvider.FindSourceDirectory(root, application);
     }
 
     private void InstallVersion(string application, string directory, RemoteVersion target)

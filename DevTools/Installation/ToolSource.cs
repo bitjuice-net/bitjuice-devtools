@@ -7,6 +7,14 @@ public class ToolSource
 {
     public const string FileName = ".source";
 
+    // The newest format this devtools understands, a newer file fails instead of installing something wrong.
+    public const int SupportedFormat = 1;
+
+    public int Format { get; set; } = 1;
+
+    // Bumped in a manifest repository whenever .app or .source of the application changes.
+    public int Revision { get; set; }
+
     public VersionSource Versions { get; set; }
 
     // Names used by the project in place of the devtools ones for {os} and {arch}, e.g. "x64": "amd64".

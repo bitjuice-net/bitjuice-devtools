@@ -20,6 +20,12 @@ public class JsonStorage : IStorage
         return File.Exists(fileName) ? JsonSerializer.Deserialize<T>(File.ReadAllText(fileName), Options) : new T();
     }
 
+    // For downloaded content that is checked before it is written anywhere.
+    public static T Parse<T>(byte[] json)
+    {
+        return JsonSerializer.Deserialize<T>(json, Options);
+    }
+
     public void Save<T>(string fileName, T obj) where T : new()
     {
         File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));

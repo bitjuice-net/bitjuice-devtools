@@ -9,4 +9,5 @@ public interface IToolDefinitionProvider
     ToolDefinition GetVersion(string application, string version);
     void Scan(string root);
     string FindSourceDirectory(string root, string application);
+    string FindDirectory(string root, string application);
 }

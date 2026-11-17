@@ -6,6 +6,7 @@ using DevTools.Cli;
 using DevTools.Infrastructure;
 using DevTools.Installation;
 using DevTools.Management;
+using DevTools.Sources;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,6 +55,9 @@ internal class Program
         services.AddSingleton<IDownloader, HttpDownloader>();
         services.AddSingleton<IToolInstaller, ToolInstaller>();
         services.AddSingleton(provider => new Lazy<IToolInstaller>(provider.GetRequiredService<IToolInstaller>));
+        services.AddSingleton<IRepositoryClient, RepositoryClient>();
+        services.AddSingleton<ISourceManager, SourceManager>();
+        services.AddSingleton(provider => new Lazy<ISourceManager>(provider.GetRequiredService<ISourceManager>));
 
         return services.BuildServiceProvider();
     }

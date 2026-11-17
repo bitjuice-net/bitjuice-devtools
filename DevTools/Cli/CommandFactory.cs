@@ -3,10 +3,11 @@ using System.CommandLine;
 using System.Linq;
 using DevTools.Catalog;
 using DevTools.Management;
+using DevTools.Sources;
 
 namespace DevTools.Cli;
 
-internal class CommandFactory(IToolManager manager) : ICommandFactory
+internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources) : ICommandFactory
 {
     public RootCommand CreateRootCommand()
     {
@@ -14,6 +15,7 @@ internal class CommandFactory(IToolManager manager) : ICommandFactory
 
         cmd.Subcommands.Add(BuildAppCommand());
         cmd.Subcommands.Add(BuildCacheCommand());
+        cmd.Subcommands.Add(BuildSourceCommand());
         cmd.Subcommands.Add(BuildShellCommand());
 
         cmd.Subcommands.Add(Shortcut("ls", "app list", BuildListCommand()));
@@ -52,6 +54,45 @@ internal class CommandFactory(IToolManager manager) : ICommandFactory
         var cmd = new Command("cache", "Application cache built by scanning the tools directory.");
         cmd.Subcommands.Add(BuildScanCommand());
         cmd.Subcommands.Add(BuildPruneCommand());
+        return cmd;
+    }
+
+    private Command BuildSourceCommand()
+    {
+        var cmd = new Command("source", "Repositories of .app and .source files, `app install` gets the files of applications you do not have from them.");
+
+        var addArgument = new Argument<string>("repository") { Description = "owner/repo on GitHub or a full directory path." };
+        var add = new Command("add", "Add a manifest repository.") { addArgument };
+        add.SetAction(result => sources.Value.Add(result.GetValue(addArgument)));
+        cmd.Subcommands.Add(add);
+
+        var removeArgument = new Argument<string>("repository");
+        var remove = new Command("remove", "Remove a manifest repository, manifests fetched from it stay.") { removeArgument };
+        remove.Aliases.Add("rm");
+        remove.SetAction(result => sources.Value.Remove(result.GetValue(removeArgument)));
+        cmd.Subcommands.Add(remove);
+
+        var list = new Command("list", "List manifest repositories and their applications.");
+        list.Aliases.Add("ls");
+        list.SetAction(_ => sources.Value.List());
+        cmd.Subcommands.Add(list);
+
+        var updateArgument = new Argument<string>("application") { Arity = ArgumentArity.ZeroOrOne, Description = "Only this application, also one whose files did not come from a source yet." };
+        var forceOption = new Option<bool>("--force") { Description = "Replace files changed by hand." };
+        var update = new Command("update", "Get newer revisions of the manifests fetched from sources.") { updateArgument, forceOption };
+        update.SetAction(result => sources.Value.Update(result.GetValue(updateArgument), result.GetValue(forceOption)));
+        cmd.Subcommands.Add(update);
+
+        var indexArgument = new Argument<string>("directory")
+        {
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = "The manifest repository, the current directory by default.",
+            DefaultValueFactory = _ => "."
+        };
+        var index = new Command("index", "Write index.json of a manifest repository from the revisions in its .source files.") { indexArgument };
+        index.SetAction(result => sources.Value.Index(result.GetValue(indexArgument)));
+        cmd.Subcommands.Add(index);
+
         return cmd;
     }
 

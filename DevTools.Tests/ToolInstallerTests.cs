@@ -11,6 +11,7 @@ using DevTools.Catalog;
 using DevTools.Infrastructure;
 using DevTools.Installation;
 using DevTools.Management;
+using DevTools.Sources;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -866,5 +867,31 @@ public sealed class ToolInstallerTests : IDisposable
 
         Assert.Equal("https://example.test/Linux/", versions.LastSource.Url);
         Assert.Equal(@"app-(?<version>\d+)-Linux-arm64\.tar\.gz", versions.LastSource.Pattern);
+    }
+
+    [Fact]
+    public void Install_FetchesManifestsOfUnknownApplicationFromSources()
+    {
+        var repo = Directory.CreateDirectory(Path.Combine(root, "..", Path.GetFileName(root) + "-repo", "tool")).Parent!.FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(repo, "tool", ".app"), """{ "name": "tool", "versioned": true, "paths": ["%APPDIR%"] }""");
+            File.WriteAllText(Path.Combine(repo, "tool", ".source"), """{ "revision": 1, "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "tool.zip" }, { "type": "extract" } ] }""");
+            File.WriteAllText(Path.Combine(repo, "index.json"), """{ "format": 1, "apps": { "tool": { "revision": 1 } } }""");
+            storage.Save("sources.json", new SourcesState { Repositories = new List<string> { repo } });
+            var options = Options.Create(new Settings { RootPath = root });
+            var sources = new SourceManager(options, storage, definitions, new RepositoryClient(new System.Net.Http.HttpClient()));
+            var withSources = new ToolManager(options, definitions, settings, new Lazy<IToolInstaller>(() => new ToolInstaller(storage, versions, downloader, platform)), new Lazy<ISourceManager>(sources));
+            Remote("1.0.0", ("tool.zip", Url, Zip(("tool.txt", "fetched"))));
+
+            TestTools.CaptureConsole(() => withSources.Install("tool", "latest"));
+
+            Assert.Equal("fetched", File.ReadAllText(Path.Combine(root, "tool", "1.0.0", "tool.txt")));
+            Assert.True(File.Exists(Path.Combine(root, "tool", ".source")));
+        }
+        finally
+        {
+            Directory.Delete(repo, true);
+        }
     }
 }
