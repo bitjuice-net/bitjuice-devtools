@@ -8,7 +8,7 @@ namespace DevTools.Catalog;
 public class ToolSettingsProvider(IStorage storage, IToolDefinitionProvider definitionProvider)
     : IToolSettingsProvider
 {
-    private static readonly string FileName = PathUtils.GetRootedPath("tool-settings.json");
+    private static readonly string FileName = PathUtils.GetDataPath("tools.json");
 
     private Dictionary<string, ToolSettings> applications;
     private Dictionary<string, ToolSettings> Applications => applications ??= storage.Load<Dictionary<string, ToolSettings>>(FileName);

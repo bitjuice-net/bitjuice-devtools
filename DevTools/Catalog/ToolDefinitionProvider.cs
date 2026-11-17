@@ -11,7 +11,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 {
     private const string ManifestFileName = ".app";
 
-    private static readonly string FileName = PathUtils.GetRootedPath("cache.json");
+    private static readonly string FileName = PathUtils.GetDataPath("cache.json");
 
     private static readonly EnumerationOptions ScanOptions = new()
     {

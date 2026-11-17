@@ -1,5 +1,6 @@
 ﻿using System;
 using System.CommandLine;
+using System.IO;
 using System.Net.Http;
 using DevTools.Catalog;
 using DevTools.Cli;
@@ -17,8 +18,7 @@ internal class Program
     private static int Main(string[] args)
     {
         var config = new ConfigurationBuilder()
-            .AddJsonFile("settings.json", optional: true)
-            .AddJsonFile("settings.local.json", optional: true)
+            .AddJsonFile(Path.Combine(PathUtils.DataDirectoryName, "settings.json"), optional: true)
             .Build();
 
         try

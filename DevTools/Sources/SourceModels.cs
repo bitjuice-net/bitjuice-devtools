@@ -16,7 +16,7 @@ public class IndexEntry
     public int Revision { get; set; }
 }
 
-// sources.json next to devtools: the registered repositories and what was fetched from them.
+// data/sources.json: the registered repositories and what was fetched from them.
 public class SourcesState
 {
     public const string DefaultRepository = "bitjuice-net/bitjuice-devtools-apps";

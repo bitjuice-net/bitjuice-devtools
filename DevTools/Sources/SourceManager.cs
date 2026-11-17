@@ -32,7 +32,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     private const string ManifestFileName = ".app";
     private static readonly string[] ManifestFiles = { ManifestFileName, ToolSource.FileName };
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
-    private static readonly string FileName = PathUtils.GetRootedPath("sources.json");
+    private static readonly string FileName = PathUtils.GetDataPath("sources.json");
 
     private readonly Settings settings = options.Value;
     private readonly Dictionary<string, RepositoryIndex> indexes = new(Comparer);

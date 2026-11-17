@@ -28,6 +28,7 @@ public class JsonStorage : IStorage
 
     public void Save<T>(string fileName, T obj) where T : new()
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(fileName)!);
         File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));
     }
 }
