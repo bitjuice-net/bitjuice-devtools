@@ -12,17 +12,35 @@ using SharpCompress.Archives.SevenZip;
 
 namespace DevTools.Installation;
 
-public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDownloader downloader)
+public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDownloader downloader, Platform platform = null)
     : IToolInstaller
 {
+    private readonly Platform platform = platform ?? Platform.Current;
+
     public Task<List<RemoteVersion>> GetVersionsAsync(string directory)
     {
-        return versionSource.GetVersionsAsync(LoadSource(directory).Versions);
+        var source = LoadSource(directory);
+        var versions = source.Versions;
+
+        // Projects often publish separate files per system, so the url and pattern may depend on it too.
+        return versionSource.GetVersionsAsync(new VersionSource
+        {
+            Type = versions.Type,
+            Repo = versions.Repo,
+            Tag = versions.Tag,
+            Url = ExpandPlatform(versions.Url, source),
+            Pattern = ExpandPlatform(versions.Pattern, source)
+        });
     }
 
     public async Task<string> InstallAsync(string directory, RemoteVersion version)
     {
         var source = LoadSource(directory);
+        var steps = source.Steps.Where(Runs).ToList();
+        if (steps.Count == 0)
+            throw new InvalidOperationException($"`{Path.Combine(directory, ToolSource.FileName)}` has no steps for {platform.Os} {platform.Arch}");
+
+        Func<string, string> expand = value => Expand(value, source, version);
         var target = Path.Combine(directory, version.Version);
         var work = Path.Combine(directory, $".install-{version.Version}-{Guid.NewGuid():N}");
 
@@ -31,19 +49,19 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         {
             string lastDownload = null;
 
-            foreach (var step in source.Steps)
+            foreach (var step in steps)
             {
                 switch (step)
                 {
                     case DownloadStep download:
-                        lastDownload = await DownloadAsync(download, version, work);
+                        lastDownload = await DownloadAsync(download, version, work, expand);
                         break;
                     case ExtractStep extract:
-                        Extract(extract, version, work, lastDownload);
+                        Extract(extract, work, lastDownload, expand);
                         lastDownload = null;
                         break;
                     case MoveStep move:
-                        Move(move, version, work);
+                        Move(move, work, expand);
                         break;
                 }
             }
@@ -116,17 +134,23 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         return source;
     }
 
-    private async Task<string> DownloadAsync(DownloadStep step, RemoteVersion version, string work)
+    private bool Runs(InstallStep step)
+    {
+        return (step.Os == null || step.Os.Equals(platform.Os, StringComparison.OrdinalIgnoreCase))
+            && (step.Arch == null || step.Arch.Equals(platform.Arch, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<string> DownloadAsync(DownloadStep step, RemoteVersion version, string work, Func<string, string> expand)
     {
         if ((step.Asset == null) == (step.Url == null))
             throw new InvalidOperationException("A download step needs either an asset or a url");
 
-        var (url, name, digest) = step.Asset != null ? FindAsset(step, version) : (Expand(step.Url, version), (string)null, (string)null);
+        var (url, name, digest) = step.Asset != null ? FindAsset(expand(step.Asset), version) : (expand(step.Url), (string)null, (string)null);
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
             throw new InvalidOperationException($"Only https downloads are supported: `{url}`");
 
-        var relative = step.To != null ? Expand(step.To, version) : name ?? Path.GetFileName(uri.AbsolutePath);
+        var relative = step.To != null ? expand(step.To) : name ?? Path.GetFileName(uri.AbsolutePath);
         var fileName = GetSafePath(work, relative);
 
         Directory.CreateDirectory(Path.GetDirectoryName(fileName));
@@ -138,9 +162,8 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         return fileName;
     }
 
-    private static (string Url, string Name, string Digest) FindAsset(DownloadStep step, RemoteVersion version)
+    private static (string Url, string Name, string Digest) FindAsset(string name, RemoteVersion version)
     {
-        var name = Expand(step.Asset, version);
         var assets = version.Assets.Where(i => FileSystemName.MatchesSimpleExpression(name, i.Name, false)).ToList();
 
         if (assets.Count == 0)
@@ -166,9 +189,9 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
             throw new InvalidOperationException($"SHA-256 of `{Path.GetFileName(fileName)}` does not match: expected {digest[prefix.Length..]}, got {actual}");
     }
 
-    private static void Extract(ExtractStep step, RemoteVersion version, string work, string lastDownload)
+    private static void Extract(ExtractStep step, string work, string lastDownload, Func<string, string> expand)
     {
-        var archive = step.File != null ? GetSafePath(work, Expand(step.File, version)) : lastDownload;
+        var archive = step.File != null ? GetSafePath(work, expand(step.File)) : lastDownload;
         if (archive == null)
             throw new InvalidOperationException("An extract step needs a file or a preceding download step");
 
@@ -254,13 +277,13 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         return entries[0].FullName;
     }
 
-    private static void Move(MoveStep step, RemoteVersion version, string work)
+    private static void Move(MoveStep step, string work, Func<string, string> expand)
     {
         if (step.From == null || step.To == null)
             throw new InvalidOperationException("A move step needs from and to");
 
-        var from = GetSafePath(work, Expand(step.From, version));
-        var to = GetSafePath(work, Expand(step.To, version));
+        var from = GetSafePath(work, expand(step.From));
+        var to = GetSafePath(work, expand(step.To));
 
         Directory.CreateDirectory(Path.GetDirectoryName(to));
         MoveEntry(from, to);
@@ -297,8 +320,15 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         return new InvalidOperationException($"Path `{relative}` is outside of the installation directory");
     }
 
-    private static string Expand(string value, RemoteVersion version)
+    private string Expand(string value, ToolSource source, RemoteVersion version)
     {
-        return value.Replace("{version}", version.SourceVersion ?? version.Version).Replace("{tag}", version.Tag);
+        return ExpandPlatform(value, source).Replace("{version}", version.SourceVersion ?? version.Version).Replace("{tag}", version.Tag);
+    }
+
+    private string ExpandPlatform(string value, ToolSource source)
+    {
+        return value?
+            .Replace("{os}", source.OsNames?.GetValueOrDefault(platform.Os) ?? platform.Os)
+            .Replace("{arch}", source.ArchNames?.GetValueOrDefault(platform.Arch) ?? platform.Arch);
     }
 }

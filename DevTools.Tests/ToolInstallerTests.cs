@@ -21,9 +21,11 @@ public sealed class ToolInstallerTests : IDisposable
     private class FakeVersionSource : IVersionSource
     {
         public List<RemoteVersion> Versions { get; } = new();
+        public VersionSource LastSource { get; private set; }
 
         public Task<List<RemoteVersion>> GetVersionsAsync(VersionSource source)
         {
+            LastSource = source;
             return Task.FromResult(Versions);
         }
     }
@@ -51,12 +53,13 @@ public sealed class ToolInstallerTests : IDisposable
     private readonly ToolSettingsProvider settings;
     private readonly ToolManager manager;
     private readonly string appDir;
+    private Platform platform = new("windows", "x64");
 
     public ToolInstallerTests()
     {
         definitions = new ToolDefinitionProvider(storage);
         settings = new ToolSettingsProvider(storage, definitions);
-        manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, new Lazy<IToolInstaller>(() => new ToolInstaller(storage, versions, downloader)));
+        manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, new Lazy<IToolInstaller>(() => new ToolInstaller(storage, versions, downloader, platform)));
         appDir = Path.Combine(root, "app");
         Directory.CreateDirectory(appDir);
         File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app", "versioned": true, "paths": ["%APPDIR%"] }""");
@@ -70,6 +73,13 @@ public sealed class ToolInstallerTests : IDisposable
     private void Source(string steps)
     {
         File.WriteAllText(Path.Combine(appDir, ".source"), $$"""{ "versions": { "type": "github-releases", "repo": "a/b" }, "steps": {{steps}} }""");
+    }
+
+    private void Remote(string version, params (string Asset, string Url, byte[] Content)[] assets)
+    {
+        versions.Versions.Insert(0, new RemoteVersion(version, "v" + version, assets.Select(i => new RemoteAsset(i.Asset, i.Url, null)).ToList()));
+        foreach (var asset in assets)
+            downloader.Files[asset.Url] = asset.Content;
     }
 
     private void Remote(string version, byte[] content, string digest = null)
@@ -778,5 +788,83 @@ public sealed class ToolInstallerTests : IDisposable
         Assert.ThrowsAny<Exception>(() => Install());
 
         Assert.False(Directory.Exists(Installed("1.0.0")));
+    }
+
+    [Fact]
+    public void Install_ExpandsOsAndArchWithProjectNames()
+    {
+        platform = new Platform("linux", "x64");
+        File.WriteAllText(Path.Combine(appDir, ".source"), """
+            {
+              "versions": { "type": "github-releases", "repo": "a/b" },
+              "archNames": { "x64": "amd64" },
+              "steps": [ { "type": "download", "asset": "app-{version}-{os}-{arch}.tar.gz" }, { "type": "extract" } ]
+            }
+            """);
+        Remote("1.0.0",
+            ("app-1.0.0-windows-amd64.tar.gz", "https://example.test/windows", TarGz(("app.txt", "windows"))),
+            ("app-1.0.0-linux-amd64.tar.gz", "https://example.test/linux", TarGz(("app.txt", "linux"))));
+
+        Install();
+
+        Assert.Equal("linux", File.ReadAllText(Installed("1.0.0", "app.txt")));
+    }
+
+    [Theory]
+    [InlineData("windows", "x64", "windows.zip")]
+    [InlineData("linux", "x64", "linux-x64.tar.gz")]
+    [InlineData("linux", "arm64", "linux-arm64.tar.gz")]
+    public void Install_RunsOnlyStepsOfThePlatform(string os, string arch, string expected)
+    {
+        platform = new Platform(os, arch);
+        Source("""
+            [
+              { "type": "download", "os": "windows", "asset": "windows.zip" },
+              { "type": "download", "os": "linux", "arch": "x64", "asset": "linux-x64.tar.gz" },
+              { "type": "download", "os": "linux", "arch": "arm64", "asset": "linux-arm64.tar.gz" },
+              { "type": "extract" }
+            ]
+            """);
+        Remote("1.0.0",
+            ("windows.zip", "https://example.test/w", Zip(("app.txt", "windows.zip"))),
+            ("linux-x64.tar.gz", "https://example.test/lx", TarGz(("app.txt", "linux-x64.tar.gz"))),
+            ("linux-arm64.tar.gz", "https://example.test/la", TarGz(("app.txt", "linux-arm64.tar.gz"))));
+
+        Install();
+
+        Assert.Equal(expected, File.ReadAllText(Installed("1.0.0", "app.txt")));
+        Assert.Single(downloader.Urls);
+    }
+
+    [Fact]
+    public void Install_FailsWhenNoStepRunsOnThePlatform()
+    {
+        platform = new Platform("linux", "x64");
+        Source("""[ { "type": "download", "os": "windows", "asset": "app.zip" } ]""");
+        Remote("1.0.0", ("app.zip", Url, Zip(("app.txt", "x"))));
+
+        var error = Assert.Throws<InvalidOperationException>(() => Install());
+
+        Assert.Contains("no steps for linux x64", error.Message);
+        Assert.Empty(downloader.Urls);
+        Assert.False(Directory.Exists(Installed("1.0.0")));
+    }
+
+    [Fact]
+    public void Update_ExpandsOsAndArchInVersionSource()
+    {
+        platform = new Platform("linux", "arm64");
+        File.WriteAllText(Path.Combine(appDir, ".source"), """
+            {
+              "versions": { "type": "web-page", "url": "https://example.test/{os}/", "pattern": "app-(?<version>\\d+)-{os}-{arch}\\.tar\\.gz" },
+              "osNames": { "linux": "Linux" },
+              "steps": [ { "type": "download", "asset": "*" } ]
+            }
+            """);
+
+        Assert.Throws<InvalidOperationException>(() => TestTools.CaptureConsole(() => manager.Update("app")));
+
+        Assert.Equal("https://example.test/Linux/", versions.LastSource.Url);
+        Assert.Equal(@"app-(?<version>\d+)-Linux-arm64\.tar\.gz", versions.LastSource.Pattern);
     }
 }
