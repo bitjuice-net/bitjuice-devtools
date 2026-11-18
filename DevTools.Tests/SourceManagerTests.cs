@@ -49,11 +49,11 @@ public sealed class SourceManagerTests : IDisposable
         Directory.Delete(temp, true);
     }
 
-    private static void Manifest(string repository, string name, int revision, string extra = "", int format = 1)
+    private static void Manifest(string repository, string name, int revision, string extra = "")
     {
         var directory = Directory.CreateDirectory(Path.Combine(repository, name)).FullName;
         File.WriteAllText(Path.Combine(directory, ".app"), $$"""{ "name": "{{name}}", "versioned": true, "paths": ["%APPDIR%"]{{extra}} }""");
-        File.WriteAllText(Path.Combine(directory, ".source"), $$"""{ "format": {{format}}, "revision": {{revision}}, "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "*" } ] }""");
+        File.WriteAllText(Path.Combine(directory, ".source"), $$"""{ "revision": {{revision}}, "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "*" } ] }""");
     }
 
     // index.json as the repository maintainer writes it, from the revisions in .source.
@@ -67,7 +67,7 @@ public sealed class SourceManagerTests : IDisposable
                 apps[Path.GetFileName(directory)] = new IndexEntry { Revision = JsonStorage.Parse<DevTools.Installation.ToolSource>(File.ReadAllBytes(source)).Revision };
         }
 
-        File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(new { format = 1, apps = apps.ToDictionary(i => i.Key, i => new { revision = i.Value.Revision }) }));
+        File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(new { apps = apps.ToDictionary(i => i.Key, i => new { revision = i.Value.Revision }) }));
     }
 
     private string Local(string name, string file)
@@ -102,13 +102,12 @@ public sealed class SourceManagerTests : IDisposable
     [InlineData("""{ "name": "other", "versioned": true }""", """{ "revision": 1 }""", "is named other")]
     [InlineData("""{ "name": "age" }""", """{ "revision": 1 }""", "versioned")]
     [InlineData("""{ "name": "age", "versioned": true }""", """{ }""", "revision of 1 or more")]
-    [InlineData("""{ "name": "age", "versioned": true }""", """{ "format": 2, "revision": 1 }""", "has format 2")]
     public void Refresh_RejectsInvalidManifests(string app, string source, string message)
     {
         var directory = Directory.CreateDirectory(Path.Combine(repo, "age")).FullName;
         File.WriteAllText(Path.Combine(directory, ".app"), app);
         File.WriteAllText(Path.Combine(directory, ".source"), source);
-        File.WriteAllText(Path.Combine(repo, RepositoryIndex.FileName), """{ "format": 1, "apps": { "age": { "revision": 1 } } }""");
+        File.WriteAllText(Path.Combine(repo, RepositoryIndex.FileName), """{ "apps": { "age": { "revision": 1 } } }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
 
@@ -175,19 +174,6 @@ public sealed class SourceManagerTests : IDisposable
 
         Assert.Contains("No `.source` file found for age", error.Message);
         Assert.Contains("source sync", error.Message);
-    }
-
-    [Fact]
-    public void Refresh_RejectsNewerFormat()
-    {
-        Manifest(repo, "age", 1);
-        Index(repo);
-        Manifest(repo, "age", 1, format: 2);
-
-        var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
-
-        Assert.Contains("update devtools", error.Message);
-        Assert.False(File.Exists(Local("age", ".source")));
     }
 
     [Fact]

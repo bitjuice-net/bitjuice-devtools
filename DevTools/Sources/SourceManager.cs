@@ -197,9 +197,6 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         if (!manifest.Versioned)
             throw new InvalidOperationException($"{ManifestFileName} in `{location}` needs \"versioned\": true to install versions");
 
-        if (source.Format > ToolSource.SupportedFormat)
-            throw new InvalidOperationException($"{ToolSource.FileName} in `{location}` has format {source.Format}, this devtools supports up to {ToolSource.SupportedFormat}, update devtools");
-
         if (source.Revision < 1)
             throw new InvalidOperationException($"{ToolSource.FileName} in `{location}` needs a revision of 1 or more");
     }
@@ -333,9 +330,6 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         var content = Download(repository, RepositoryIndex.FileName)
             ?? throw new InvalidOperationException($"{repository} has no {RepositoryIndex.FileName}, is it a manifest repository?");
         var index = JsonStorage.Parse<RepositoryIndex>(content);
-
-        if (index.Format > ToolSource.SupportedFormat)
-            throw new InvalidOperationException($"{repository} has index format {index.Format}, this devtools supports up to {ToolSource.SupportedFormat}, update devtools");
 
         return index;
     }

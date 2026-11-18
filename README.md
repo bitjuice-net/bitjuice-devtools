@@ -83,7 +83,6 @@ Where the versions come from and how a version is installed.
 
 ```json
 {
-  "format": 1,
   "revision": 1,
   "versions": { "type": "github-releases", "repo": "FiloSottile/age", "tag": "^v(?<version>\\d+\\.\\d+\\.\\d+)$" },
   "archNames": { "x64": "amd64" },
@@ -102,7 +101,7 @@ Where the versions come from and how a version is installed.
 - `{version}`, `{tag}`, `{os}` (`windows`, `linux`, `macos`) and `{arch}` (`x64`, `arm64`, ...) are replaced in steps
   and in `versions.url` and `versions.pattern`. `osNames` and `archNames` map them to the names a project uses.
   `os` and `arch` on a step run it only on that system or architecture.
-- `format` is the version of this file format, `revision` the version of the manifests of the application.
+- `revision` is the version of the manifests of the application.
 
 GitHub allows 60 API requests an hour without a token. A token in `data/settings.json` raises the limit and opens private
 manifest repositories, the `GITHUB_TOKEN` variable is used when the settings have none. A token without any scopes is
@@ -128,7 +127,7 @@ A repository has a directory per application with `.app` and `.source`, and `ind
 of every application:
 
 ```json
-{ "format": 1, "apps": { "age": { "revision": 2 }, "java": { "revision": 1 } } }
+{ "apps": { "age": { "revision": 2 }, "java": { "revision": 1 } } }
 ```
 
 A list older than a day is downloaded again when `dt app install` or `dt app update` needs it, an unavailable
