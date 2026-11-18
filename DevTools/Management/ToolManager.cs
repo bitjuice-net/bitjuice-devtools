@@ -27,6 +27,8 @@ public class ToolManager(
 
     public void GetEnv(Shell shell)
     {
+        EnsureScanned();
+
         var pathBuilder = new PathBuilder();
         var envsBuilder = new EnvsBuilder();
 
@@ -45,6 +47,24 @@ public class ToolManager(
     public void Scan()
     {
         toolDefinitionProvider.Scan(PathUtils.GetRootedPath(settings.RootPath));
+    }
+
+    // Changes made by hand, such as a new version directory or an edited .app, are found without `sc`.
+    // A failed scan must not break the console, so the previous list stays and the next command tries again.
+    private void EnsureScanned()
+    {
+        var root = PathUtils.GetRootedPath(settings.RootPath);
+        if (!Directory.Exists(root) || toolDefinitionProvider.IsUpToDate(root))
+            return;
+
+        try
+        {
+            toolDefinitionProvider.Scan(root);
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            Console.Error.WriteLine($"Could not scan {root}, using the previous list of applications: {e.Message}");
+        }
     }
 
     public void Prune()
@@ -77,16 +97,16 @@ public class ToolManager(
         Console.WriteLine($"Pruned {pruned} stale setting(s)");
     }
 
-    public void Install(string application, string version)
+    public void Install(string application, string version, bool refresh = false)
     {
         Scan();
 
         var directory = FindOrFetchSourceDirectory(application);
-        var available = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult();
+        var target = FindRemoteVersion(directory, version, refresh);
 
-        var target = version == MetaVersion.Latest
-            ? available.FirstOrDefault()
-            : available.FirstOrDefault(i => VersionNumber.AreEqual(i.Version, version));
+        // A version released since the versions were cached is not in the cache yet.
+        if (target == null && !refresh)
+            target = FindRemoteVersion(directory, version, true);
 
         if (target == null)
             throw new InvalidOperationException($"Version {version} of {application} not found");
@@ -100,14 +120,23 @@ public class ToolManager(
         InstallVersion(application, directory, target);
     }
 
-    public void Update(string application)
+    private RemoteVersion FindRemoteVersion(string directory, string version, bool refresh)
+    {
+        var available = toolInstaller.GetVersionsAsync(directory, refresh).GetAwaiter().GetResult();
+
+        return version == MetaVersion.Latest
+            ? available.FirstOrDefault()
+            : available.FirstOrDefault(i => VersionNumber.AreEqual(i.Version, version));
+    }
+
+    public void Update(string application, bool refresh = false)
     {
         Scan();
-        UpdateOne(application);
+        UpdateOne(application, refresh);
     }
 
     // Every application with a .source, one that fails does not stop the others.
-    public void UpdateAll()
+    public void UpdateAll(bool refresh = false)
     {
         Scan();
 
@@ -125,7 +154,7 @@ public class ToolManager(
         {
             try
             {
-                if (UpdateOne(name))
+                if (UpdateOne(name, refresh))
                     updated.Add(name);
             }
             catch (Exception e)
@@ -149,10 +178,10 @@ public class ToolManager(
         return definition is { Manifest.Versioned: true } && File.Exists(Path.Combine(Path.GetDirectoryName(definition.Path)!, ToolSource.FileName));
     }
 
-    private bool UpdateOne(string application)
+    private bool UpdateOne(string application, bool refresh)
     {
         var directory = FindOrFetchSourceDirectory(application);
-        var newest = toolInstaller.GetVersionsAsync(directory).GetAwaiter().GetResult().FirstOrDefault();
+        var newest = toolInstaller.GetVersionsAsync(directory, refresh).GetAwaiter().GetResult().FirstOrDefault();
 
         if (newest == null)
             throw new InvalidOperationException($"No versions of {application} found");
@@ -218,6 +247,7 @@ public class ToolManager(
 
     public void List(bool all)
     {
+        EnsureScanned();
         var table = new TextTable("NAME", "SELECTED", "INSTALLED", "STATUS");
 
         var names = toolDefinitionProvider.GetNames();
@@ -343,6 +373,7 @@ public class ToolManager(
     // The installed versions, an unknown application is an error instead of settings for nothing.
     private List<ToolDefinition> FindVersions(string application)
     {
+        EnsureScanned();
         var versions = toolDefinitionProvider.GetVersions(application);
         if (versions.Count == 0)
             throw new InvalidOperationException($"{application} not found, `ls` lists the applications and `sc` finds new ones");

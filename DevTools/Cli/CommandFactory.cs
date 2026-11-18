@@ -148,8 +148,9 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
             Description = "Version to install, latest by default.",
             DefaultValueFactory = _ => MetaVersion.Latest
         };
-        var cmd = new Command("install", "Download and install a version of an application.") { applicationArgument, versionArgument };
-        cmd.SetAction(result => manager.Install(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
+        var refreshOption = RefreshOption();
+        var cmd = new Command("install", "Download and install a version of an application.") { applicationArgument, versionArgument, refreshOption };
+        cmd.SetAction(result => manager.Install(result.GetValue(applicationArgument), result.GetValue(versionArgument), result.GetValue(refreshOption)));
         return cmd;
     }
 
@@ -160,16 +161,22 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
             Arity = ArgumentArity.ZeroOrOne,
             Description = "Without it every application with a .source is updated."
         };
-        var cmd = new Command("update", "Install the newest version when it is newer than the installed ones.") { applicationArgument };
+        var refreshOption = RefreshOption();
+        var cmd = new Command("update", "Install the newest version when it is newer than the installed ones.") { applicationArgument, refreshOption };
         cmd.SetAction(result =>
         {
             var application = result.GetValue(applicationArgument);
             if (application == null)
-                manager.UpdateAll();
+                manager.UpdateAll(result.GetValue(refreshOption));
             else
-                manager.Update(application);
+                manager.Update(application, result.GetValue(refreshOption));
         });
         return cmd;
+    }
+
+    private static Option<bool> RefreshOption()
+    {
+        return new Option<bool>("--refresh") { Description = "Ask the version sources again, without it versions found in the last hour are used." };
     }
 
     private Command BuildRemoveCommand()

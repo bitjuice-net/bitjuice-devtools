@@ -33,3 +33,10 @@ public class FetchedApp
     // SHA-256 of the files as they were fetched, a different local file was changed by hand.
     public Dictionary<string, string> Hashes { get; set; } = new();
 }
+
+// An index in data/indexes.json with the time it was downloaded.
+public class SyncedIndex
+{
+    public System.DateTimeOffset Synced { get; set; }
+    public RepositoryIndex Index { get; set; }
+}

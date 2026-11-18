@@ -44,8 +44,11 @@ dt app update java      install the newest version when it is newer than the ins
 dt app update           the same for every application with a .source
 dt app remove java 17.0.7
 dt app disable java     take an application off PATH without deleting it, `dt app enable java` puts it back
-dt sc                   scan the tools directory after adding or deleting versions by hand
+dt sc                   scan the tools directory now
 ```
+
+Versions added or deleted by hand and edited `.app` files are found on their own, a scan is rarely needed.
+`install` and `update` use the versions found in the last hour, `--refresh` asks the version sources again.
 
 | Group | Commands |
 |---|---|
@@ -101,7 +104,13 @@ Where the versions come from and how a version is installed.
   `os` and `arch` on a step run it only on that system or architecture.
 - `format` is the version of this file format, `revision` the version of the manifests of the application.
 
-GitHub allows 60 API requests an hour without a token. Set `GITHUB_TOKEN` to raise the limit.
+GitHub allows 60 API requests an hour without a token. A token in `data/settings.json` raises the limit and opens private
+manifest repositories, the `GITHUB_TOKEN` variable is used when the settings have none. A token without any scopes is
+enough for public repositories.
+
+```json
+{ "githubToken": "github_pat_..." }
+```
 
 ## Manifest repositories
 
@@ -112,7 +121,7 @@ GitHub allows 60 API requests an hour without a token. Set `GITHUB_TOKEN` to rai
 dt source list                       repositories and how many applications they have
 dt source list owner/repo            the applications of a repository and their revisions
 dt source add owner/repo             add a repository on GitHub, or a full local path while writing manifests
-dt source sync                       get the newest lists of applications of all repositories
+dt source sync                       get the newest lists of applications of all repositories now
 ```
 
 A repository has a directory per application with `.app` and `.source`, and `index.json` in its root with the revision
@@ -122,7 +131,8 @@ of every application:
 { "format": 1, "apps": { "age": { "revision": 2 }, "java": { "revision": 1 } } }
 ```
 
-`dt app install` and `dt app update` bring the manifests of an application to the revision of the last `source sync`:
+A list older than a day is downloaded again when `dt app install` or `dt app update` needs it, an unavailable
+repository keeps the previous one. These commands bring the manifests of an application to the revision on the list:
 
 - An application gets the manifests of the repository with the newest revision and stays with that repository.
 - Manifests not fetched from a repository count as their own `revision`, 1 without one, and are replaced only by a newer one.
@@ -136,9 +146,11 @@ Settings and state are in `data` next to devtools:
 |---|---|
 | `settings.json` | settings, e.g. `rootPath` |
 | `tools.json` | selected and disabled versions |
-| `cache.json` | applications found in the tools directory, `dt sc` refreshes it |
+| `cache.json` | applications found in the tools directory |
+| `scan.json` | times of the scanned directories and `.app` files, a change makes the next command scan again |
+| `versions.json` | versions found by the version sources, kept for an hour |
 | `sources.json` | manifest repositories and what was fetched from them |
-| `indexes.json` | the lists of the repositories, `dt source sync` refreshes them |
+| `indexes.json` | the lists of the repositories, downloaded again after a day or by `dt source sync` |
 | `state` | changes on every save, `dt` reloads the console only when it changed |
 
 ## Building

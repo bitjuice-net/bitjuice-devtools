@@ -81,9 +81,11 @@ public sealed class SourceManagerTests : IDisposable
     }
 
     // A new instance, like the next devtools command, that reads the synced indexes again.
+    private readonly FakeTime time = new();
+
     private SourceManager Next()
     {
-        return new SourceManager(Options.Create(new Settings { RootPath = root }), storage, new ToolDefinitionProvider(storage), client);
+        return new SourceManager(Options.Create(new Settings { RootPath = root }), storage, new ToolDefinitionProvider(storage), client, time);
     }
 
     private string Refresh(string application)
@@ -336,5 +338,37 @@ public sealed class SourceManagerTests : IDisposable
 
         Assert.NotEqual("", first);
         Assert.NotEqual(first, JsonStorage.ReadState(Path.Combine(temp, "data")));
+    }
+
+    [Fact]
+    public void Refresh_DownloadsAListOlderThanADay()
+    {
+        Manifest(repo, "age", 1);
+        Index(repo);
+        Refresh("age");
+        Manifest(repo, "age", 2, """, "envs": { "AGE": "1" }""");
+        Index(repo);
+
+        Refresh("age");
+        Assert.Equal(1, Fetched("age").Revision);
+
+        time.Now += SourceManager.MaxIndexAge;
+        Refresh("age");
+        Assert.Equal(2, Fetched("age").Revision);
+    }
+
+    [Fact]
+    public void Refresh_UsesAnOldListWhenTheSourceIsUnavailable()
+    {
+        Manifest(repo, "age", 1);
+        Index(repo);
+        Sync();
+        File.Delete(Path.Combine(repo, RepositoryIndex.FileName));
+        time.Now += SourceManager.MaxIndexAge;
+
+        var error = TestTools.CaptureError(() => Refresh("age"));
+
+        Assert.Contains("using the list from", error);
+        Assert.True(File.Exists(Local("age", ".source")));
     }
 }

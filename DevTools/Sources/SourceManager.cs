@@ -29,7 +29,7 @@ public interface ISourceManager
 
 // Manifest repositories: a directory per application with .app and .source, and index.json with their revisions.
 // The indexes are kept in data/indexes.json, `source sync` gets them again.
-public partial class SourceManager(IOptions<Settings> options, IStorage storage, IToolDefinitionProvider definitions, IRepositoryClient client)
+public partial class SourceManager(IOptions<Settings> options, IStorage storage, IToolDefinitionProvider definitions, IRepositoryClient client, TimeProvider time = null)
     : ISourceManager
 {
     private const string ManifestFileName = ".app";
@@ -43,8 +43,14 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     private SourcesState state;
     private SourcesState State => state ??= storage.Load<SourcesState>(FileName);
 
-    private Dictionary<string, RepositoryIndex> indexes;
-    private Dictionary<string, RepositoryIndex> Indexes => indexes ??= new Dictionary<string, RepositoryIndex>(storage.Load<Dictionary<string, RepositoryIndex>>(IndexesFileName), Comparer);
+    private Dictionary<string, SyncedIndex> indexes;
+    private Dictionary<string, SyncedIndex> Indexes => indexes ??= new Dictionary<string, SyncedIndex>(
+        storage.Load<Dictionary<string, SyncedIndex>>(IndexesFileName).Where(i => i.Value.Index != null), Comparer);
+
+    // A list older than this is downloaded again when it is needed, `source sync` does it right away.
+    public static readonly TimeSpan MaxIndexAge = TimeSpan.FromHours(24);
+
+    private readonly TimeProvider time = time ?? TimeProvider.System;
 
     public void Add(string repository)
     {
@@ -58,7 +64,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
 
         var index = DownloadIndex(repository);
         State.Repositories.Add(repository);
-        Indexes[repository] = index;
+        Indexes[repository] = Synced(index);
         Save();
         SaveIndexes();
 
@@ -137,7 +143,8 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         {
             try
             {
-                var index = Indexes[repository] = DownloadIndex(repository);
+                var index = DownloadIndex(repository);
+                Indexes[repository] = Synced(index);
                 Console.WriteLine($"{repository}: {index.Apps.Count} application(s)");
             }
             catch (Exception e) when (IsUnavailable(e))
@@ -295,15 +302,30 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         }
     }
 
-    // The synced index, a repository that was never synced is synced on first use.
+    // The synced index. One never synced or older than a day is downloaded, an unavailable repository keeps the old one.
     private RepositoryIndex GetIndex(string repository)
     {
-        if (Indexes.TryGetValue(repository, out var cached))
-            return cached;
+        var cached = Indexes.GetValueOrDefault(repository);
+        if (cached != null && time.GetUtcNow() - cached.Synced < MaxIndexAge)
+            return cached.Index;
 
-        var index = Indexes[repository] = DownloadIndex(repository);
-        SaveIndexes();
-        return index;
+        try
+        {
+            var index = DownloadIndex(repository);
+            Indexes[repository] = Synced(index);
+            SaveIndexes();
+            return index;
+        }
+        catch (Exception e) when (cached != null && IsUnavailable(e))
+        {
+            Console.Error.WriteLine($"{repository}: {e.Message}, using the list from {cached.Synced.LocalDateTime:g}");
+            return cached.Index;
+        }
+    }
+
+    private SyncedIndex Synced(RepositoryIndex index)
+    {
+        return new SyncedIndex { Synced = time.GetUtcNow(), Index = index };
     }
 
     private RepositoryIndex DownloadIndex(string repository)
@@ -341,12 +363,12 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
 
     private void Save()
     {
-        storage.Save(FileName, State);
+        storage.Save(FileName, State, changesState: false);
     }
 
     private void SaveIndexes()
     {
-        storage.Save(IndexesFileName, Indexes);
+        storage.Save(IndexesFileName, Indexes, changesState: false);
     }
 
     [GeneratedRegex(@"^[\w.-]+/[\w.-]+$")]

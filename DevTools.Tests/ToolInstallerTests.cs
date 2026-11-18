@@ -23,9 +23,11 @@ public sealed class ToolInstallerTests : IDisposable
     {
         public List<RemoteVersion> Versions { get; } = new();
         public VersionSource LastSource { get; private set; }
+        public int Calls { get; private set; }
 
         public Task<List<RemoteVersion>> GetVersionsAsync(VersionSource source)
         {
+            Calls++;
             LastSource = source;
             return Task.FromResult(Versions);
         }
@@ -928,5 +930,41 @@ public sealed class ToolInstallerTests : IDisposable
         Assert.Contains("broken: ", error);
         Assert.Contains("Updated 1, up to date 0, failed 1 of 2 application(s): app", output.ToString());
         Assert.DoesNotContain("plain", output + error);
+    }
+
+    [Fact]
+    public async Task GetVersions_UsesCachedVersionsForAnHour()
+    {
+        Source("""[ { "type": "download", "asset": "app-{version}.zip" } ]""");
+        Remote("1.0.0", Zip(("app.txt", "x")));
+        var time = new FakeTime();
+        var installer = new ToolInstaller(storage, versions, downloader, platform, new VersionCache(storage, time));
+
+        await installer.GetVersionsAsync(appDir);
+        await installer.GetVersionsAsync(appDir);
+        Assert.Equal(1, versions.Calls);
+
+        await installer.GetVersionsAsync(appDir, refresh: true);
+        Assert.Equal(2, versions.Calls);
+
+        time.Now += VersionCache.Duration;
+        await installer.GetVersionsAsync(appDir);
+        Assert.Equal(3, versions.Calls);
+    }
+
+    [Fact]
+    public void Install_AsksAgainForAVersionNotInTheCache()
+    {
+        Source("""[ { "type": "download", "asset": "app-{version}.zip" }, { "type": "extract" } ]""");
+        Remote("1.0.0", Zip(("app.txt", "x")));
+        var cache = new VersionCache(storage, new FakeTime());
+        var cached = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings,
+            new Lazy<IToolInstaller>(() => new ToolInstaller(storage, versions, downloader, platform, cache)));
+        TestTools.CaptureConsole(() => cached.Install("app", "1.0.0"));
+        Remote("2.0.0", Zip(("app.txt", "y")));
+
+        TestTools.CaptureConsole(() => cached.Install("app", "2.0.0"));
+
+        Assert.True(Directory.Exists(Installed("2.0.0")));
     }
 }

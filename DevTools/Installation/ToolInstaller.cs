@@ -12,25 +12,33 @@ using SharpCompress.Archives.SevenZip;
 
 namespace DevTools.Installation;
 
-public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDownloader downloader, Platform platform = null)
+public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDownloader downloader, Platform platform = null, VersionCache cache = null)
     : IToolInstaller
 {
     private readonly Platform platform = platform ?? Platform.Current;
 
-    public Task<List<RemoteVersion>> GetVersionsAsync(string directory)
+    public async Task<List<RemoteVersion>> GetVersionsAsync(string directory, bool refresh = false)
     {
         var source = LoadSource(directory);
         var versions = source.Versions;
 
         // Projects often publish separate files per system, so the url and pattern may depend on it too.
-        return versionSource.GetVersionsAsync(new VersionSource
+        var expanded = new VersionSource
         {
             Type = versions.Type,
             Repo = versions.Repo,
             Tag = versions.Tag,
             Url = ExpandPlatform(versions.Url, source),
             Pattern = ExpandPlatform(versions.Pattern, source)
-        });
+        };
+
+        var key = VersionCache.Key(expanded);
+        if (cache != null && !refresh && cache.Get(key) is { } cached)
+            return cached;
+
+        var found = await versionSource.GetVersionsAsync(expanded);
+        cache?.Set(key, found);
+        return found;
     }
 
     public async Task<string> InstallAsync(string directory, RemoteVersion version)

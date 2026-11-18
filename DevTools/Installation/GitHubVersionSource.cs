@@ -8,10 +8,11 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DevTools.Infrastructure;
+using Microsoft.Extensions.Options;
 
 namespace DevTools.Installation;
 
-public class GitHubVersionSource(HttpClient client) : IVersionSource
+public class GitHubVersionSource(HttpClient client, IOptions<Settings> options = null) : IVersionSource
 {
     private const string Releases = "github-releases";
     private const string Tags = "github-tags";
@@ -66,14 +67,14 @@ public class GitHubVersionSource(HttpClient client) : IVersionSource
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
         request.Headers.UserAgent.ParseAdd("bitjuice-devtools");
 
-        var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrWhiteSpace(token))
+        var token = (options?.Value ?? new Settings()).ResolveGitHubToken();
+        if (token != null)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         using var response = await client.SendAsync(request);
 
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
-            throw new InvalidOperationException($"GitHub refused the request for {repo} ({(int)response.StatusCode}). The API rate limit may be exceeded, set GITHUB_TOKEN to raise it.");
+            throw new InvalidOperationException($"GitHub refused the request for {repo} ({(int)response.StatusCode}). The API rate limit may be exceeded, set githubToken in data/settings.json to raise it.");
 
         if (response.StatusCode == HttpStatusCode.UnprocessableEntity && page > 1)
             return null;

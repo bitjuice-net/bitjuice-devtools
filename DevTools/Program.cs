@@ -58,6 +58,7 @@ internal class Program
         services.AddSingleton<WebPageVersionSource>();
         services.AddSingleton<IVersionSource, VersionSourceRouter>();
         services.AddSingleton<IDownloader, HttpDownloader>();
+        services.AddSingleton<VersionCache>();
         services.AddSingleton<IToolInstaller, ToolInstaller>();
         services.AddSingleton(provider => new Lazy<IToolInstaller>(provider.GetRequiredService<IToolInstaller>));
         services.AddSingleton<IRepositoryClient, RepositoryClient>();

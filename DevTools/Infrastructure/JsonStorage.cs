@@ -22,6 +22,11 @@ public class JsonStorage : IStorage
         return File.Exists(fileName) ? JsonSerializer.Deserialize<T>(File.ReadAllText(fileName), Options) : new T();
     }
 
+    public bool Exists(string fileName)
+    {
+        return File.Exists(fileName);
+    }
+
     // For downloaded content that is checked before it is written anywhere.
     public static T Parse<T>(byte[] json)
     {
@@ -30,13 +35,15 @@ public class JsonStorage : IStorage
 
     public const string StateFileName = "state";
 
-    // Every save also writes a new stamp to `state`, so shells reload PATH and variables only after a change.
-    public void Save<T>(string fileName, T obj) where T : new()
+    // A save also writes a new stamp to `state`, so shells reload PATH and variables only after a change.
+    public void Save<T>(string fileName, T obj, bool changesState = true) where T : new()
     {
         var directory = Path.GetDirectoryName(fileName)!;
         Directory.CreateDirectory(directory);
         File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));
-        File.WriteAllText(Path.Combine(directory, StateFileName), DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture));
+
+        if (changesState)
+            File.WriteAllText(Path.Combine(directory, StateFileName), DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture));
     }
 
     public static string ReadState(string directory)

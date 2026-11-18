@@ -32,6 +32,14 @@ public sealed class ScanTests : IDisposable
         File.WriteAllText(Path.Combine(path, ".app"), content);
     }
 
+    // Times a minute old, so a scan right after creating the files can trust them.
+    private void Age()
+    {
+        var old = DateTime.UtcNow.AddMinutes(-1);
+        foreach (var entry in new DirectoryInfo(root).EnumerateFileSystemInfos("*", SearchOption.AllDirectories).Append(new DirectoryInfo(root)))
+            entry.LastWriteTimeUtc = old;
+    }
+
     private void Dirs(params string[] directories)
     {
         foreach (var directory in directories)
@@ -254,5 +262,58 @@ public sealed class ScanTests : IDisposable
 
         Assert.Equal(new[] { "java" }, settings.GetApplications());
         Assert.Equal("latest", settings.GetSettings("java").Version);
+    }
+
+    [Fact]
+    public void IsUpToDate_NoticesNewVersionsAndEditedManifests()
+    {
+        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        Dirs("java/1.0.0", "devtools/data");
+        Age();
+        definitions.Scan(root);
+        Assert.True(definitions.IsUpToDate(root));
+
+        File.WriteAllText(Path.Combine(root, "devtools", "data", "state"), "1");
+        Assert.True(definitions.IsUpToDate(root));
+
+        Dirs("java/2.0.0");
+        Assert.False(definitions.IsUpToDate(root));
+
+        Age();
+        definitions.Scan(root);
+        File.SetLastWriteTimeUtc(Path.Combine(root, "java", ".app"), DateTime.UtcNow.AddMinutes(1));
+        Assert.False(definitions.IsUpToDate(root));
+    }
+
+    [Fact]
+    public void List_FindsVersionsAddedByHand()
+    {
+        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        Dirs("java/1.0.0");
+        var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, new ToolSettingsProvider(storage, definitions), null);
+        Age();
+        definitions.Scan(root);
+        Dirs("java/2.0.0");
+
+        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("java "));
+
+        Assert.Contains("1.0.0, 2.0.0", row);
+    }
+
+    [Fact]
+    public void Env_KeepsThePreviousListWhenTheScanFails()
+    {
+        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        Dirs("java/1.0.0");
+        var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, new ToolSettingsProvider(storage, definitions), null);
+        Age();
+        definitions.Scan(root);
+        Manifest("broken", "{ not json");
+
+        var output = "";
+        var error = TestTools.CaptureError(() => output = TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
+
+        Assert.Contains("Could not scan", error);
+        Assert.Contains(Path.Combine(root, "java", "1.0.0"), output);
     }
 }

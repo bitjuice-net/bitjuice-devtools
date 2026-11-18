@@ -22,7 +22,12 @@ internal class MemoryStorage : IStorage
         return files.TryGetValue(Path.GetFileName(fileName), out var value) ? (T)value : new T();
     }
 
-    public void Save<T>(string fileName, T obj) where T : new()
+    public bool Exists(string fileName)
+    {
+        return files.ContainsKey(Path.GetFileName(fileName));
+    }
+
+    public void Save<T>(string fileName, T obj, bool changesState = true) where T : new()
     {
         files[Path.GetFileName(fileName)] = obj;
     }
@@ -87,5 +92,15 @@ internal static class TestTools
             return;
 
         Assert.True(File.GetUnixFileMode(fileName).HasFlag(UnixFileMode.UserExecute), $"{fileName} is not executable");
+    }
+}
+// A clock the test moves by hand.
+internal class FakeTime : TimeProvider
+{
+    public DateTimeOffset Now { get; set; } = new(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        return Now;
     }
 }

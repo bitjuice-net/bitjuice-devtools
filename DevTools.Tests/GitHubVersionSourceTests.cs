@@ -135,6 +135,26 @@ public class GitHubVersionSourceTests
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => source.GetVersionsAsync(new VersionSource { Type = "github-tags", Repo = "a/b" }));
 
-        Assert.Contains("GITHUB_TOKEN", error.Message);
+        Assert.Contains("githubToken in data/settings.json", error.Message);
+    }
+
+    [Fact]
+    public async Task TokenOfTheSettingsWinsOverTheEnvironment()
+    {
+        var handler = new FakeHandler(_ => Json("[]"));
+        var source = new GitHubVersionSource(new HttpClient(handler), Microsoft.Extensions.Options.Options.Create(new DevTools.Infrastructure.Settings { GitHubToken = "from-settings" }));
+        var original = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("GITHUB_TOKEN", "from-environment");
+            await source.GetVersionsAsync(new VersionSource { Type = "github-tags", Repo = "a/b" });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GITHUB_TOKEN", original);
+        }
+
+        Assert.Equal("from-settings", handler.Requests[0].Headers.Authorization.Parameter);
     }
 }
