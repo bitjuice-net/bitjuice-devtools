@@ -9,12 +9,6 @@ using Microsoft.Extensions.Options;
 
 namespace DevTools.Sources;
 
-public interface IRepositoryClient
-{
-    // The file content, or null when the repository has no such file.
-    Task<byte[]> GetFileAsync(string repository, string path);
-}
-
 // A repository is owner/repo on GitHub, read from its default branch, or a local directory, handy while writing manifests.
 public class RepositoryClient(HttpClient client, IOptions<Settings> options = null) : IRepositoryClient
 {

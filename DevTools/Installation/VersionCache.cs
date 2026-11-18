@@ -43,9 +43,3 @@ public class VersionCache(IStorage storage, TimeProvider time = null)
         return entry.Versions == null || time.GetUtcNow() - entry.Time >= Duration;
     }
 }
-
-public class CachedVersions
-{
-    public DateTimeOffset Time { get; set; }
-    public List<RemoteVersion> Versions { get; set; }
-}

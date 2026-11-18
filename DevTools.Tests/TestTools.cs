@@ -3,35 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using DevTools.Catalog;
-using DevTools.Infrastructure;
 using Xunit;
 
-[assembly: CollectionBehavior(DisableTestParallelization = true)]
-
 namespace DevTools.Tests;
-
-internal class MemoryStorage : IStorage
-{
-    private readonly Dictionary<string, object> files = new();
-
-    public T Load<T>(string fileName) where T : new()
-    {
-        if (Path.GetFileName(fileName) is ".app" or ".source")
-            return new JsonStorage().Load<T>(fileName);
-
-        return files.TryGetValue(Path.GetFileName(fileName), out var value) ? (T)value : new T();
-    }
-
-    public bool Exists(string fileName)
-    {
-        return files.ContainsKey(Path.GetFileName(fileName));
-    }
-
-    public void Save<T>(string fileName, T obj, bool changesState = true) where T : new()
-    {
-        files[Path.GetFileName(fileName)] = obj;
-    }
-}
 
 internal static class TestTools
 {
@@ -92,15 +66,5 @@ internal static class TestTools
             return;
 
         Assert.True(File.GetUnixFileMode(fileName).HasFlag(UnixFileMode.UserExecute), $"{fileName} is not executable");
-    }
-}
-// A clock the test moves by hand.
-internal class FakeTime : TimeProvider
-{
-    public DateTimeOffset Now { get; set; } = new(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
-
-    public override DateTimeOffset GetUtcNow()
-    {
-        return Now;
     }
 }
