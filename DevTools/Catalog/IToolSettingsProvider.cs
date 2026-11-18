@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using DevTools.Catalog.Models;
 
 namespace DevTools.Catalog;
 

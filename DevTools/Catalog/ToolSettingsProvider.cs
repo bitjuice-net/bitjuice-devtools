@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
 
 namespace DevTools.Catalog;

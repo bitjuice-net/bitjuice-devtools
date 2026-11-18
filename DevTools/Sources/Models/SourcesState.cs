@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace DevTools.Sources;
+namespace DevTools.Sources.Models;
 
 // data/sources.json: the registered repositories and what was fetched from them.
 public class SourcesState

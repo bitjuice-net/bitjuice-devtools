@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace DevTools.Sources;
+namespace DevTools.Sources.Models;
 
 // index.json in the root of a manifest repository.
 public class RepositoryIndex

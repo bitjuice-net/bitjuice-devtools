@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using DevTools.Catalog;
-using DevTools.Installation;
-using DevTools.Sources;
+using DevTools.Catalog.Models;
+using DevTools.Installation.Models;
+using DevTools.Sources.Models;
 
 namespace DevTools.Infrastructure;
 

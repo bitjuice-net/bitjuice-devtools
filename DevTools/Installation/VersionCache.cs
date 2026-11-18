@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DevTools.Infrastructure;
+using DevTools.Installation.Models;
 
 namespace DevTools.Installation;
 

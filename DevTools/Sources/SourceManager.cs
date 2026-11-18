@@ -6,8 +6,10 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using DevTools.Catalog;
+using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
-using DevTools.Installation;
+using DevTools.Installation.Models;
+using DevTools.Sources.Models;
 using Microsoft.Extensions.Options;
 
 namespace DevTools.Sources;

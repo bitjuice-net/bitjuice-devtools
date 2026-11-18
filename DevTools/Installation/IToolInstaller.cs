@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using DevTools.Installation.Models;
 
 namespace DevTools.Installation;
 

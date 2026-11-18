@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace DevTools.Installation;
+namespace DevTools.Installation.Models;
 
 public class ToolSource
 {

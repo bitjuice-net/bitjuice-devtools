@@ -1,3 +1,5 @@
+using DevTools.Sources.Models;
+
 namespace DevTools.Sources;
 
 public interface ISourceManager

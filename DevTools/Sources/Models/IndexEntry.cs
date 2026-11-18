@@ -1,4 +1,4 @@
-namespace DevTools.Sources;
+namespace DevTools.Sources.Models;
 
 public class IndexEntry
 {

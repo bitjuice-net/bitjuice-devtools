@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DevTools.Infrastructure;
+using DevTools.Installation.Models;
 using Microsoft.Extensions.Options;
 
 namespace DevTools.Installation;

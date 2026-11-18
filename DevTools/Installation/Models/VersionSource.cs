@@ -1,4 +1,4 @@
-﻿namespace DevTools.Installation;
+﻿namespace DevTools.Installation.Models;
 
 public class VersionSource
 {

@@ -10,8 +10,10 @@ using System.Threading.Tasks;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
 using DevTools.Installation;
+using DevTools.Installation.Models;
 using DevTools.Management;
 using DevTools.Sources;
+using DevTools.Sources.Models;
 using Microsoft.Extensions.Options;
 using Xunit;
 

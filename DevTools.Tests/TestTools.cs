@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using DevTools.Catalog;
+using DevTools.Catalog.Models;
 using Xunit;
 
 namespace DevTools.Tests;

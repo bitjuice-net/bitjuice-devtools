@@ -8,6 +8,7 @@ using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using DevTools.Infrastructure;
+using DevTools.Installation.Models;
 using SharpCompress.Archives.SevenZip;
 
 namespace DevTools.Installation;

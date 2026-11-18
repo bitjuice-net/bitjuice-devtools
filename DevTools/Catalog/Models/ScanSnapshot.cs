@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace DevTools.Catalog;
+namespace DevTools.Catalog.Models;
 
 // data/scan.json: what the last scan looked at and when it was last written.
 public class ScanSnapshot

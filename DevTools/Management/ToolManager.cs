@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using DevTools.Catalog;
+using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
 using DevTools.Installation;
+using DevTools.Installation.Models;
 using DevTools.Sources;
 using Microsoft.Extensions.Options;
 

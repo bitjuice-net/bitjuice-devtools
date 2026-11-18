@@ -6,7 +6,9 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
+using DevTools.Installation.Models;
 using DevTools.Sources;
+using DevTools.Sources.Models;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -64,7 +66,7 @@ public sealed class SourceManagerTests : IDisposable
         {
             var source = Path.Combine(directory, ".source");
             if (File.Exists(source))
-                apps[Path.GetFileName(directory)] = new IndexEntry { Revision = JsonStorage.Parse<DevTools.Installation.ToolSource>(File.ReadAllBytes(source)).Revision };
+                apps[Path.GetFileName(directory)] = new IndexEntry { Revision = JsonStorage.Parse<ToolSource>(File.ReadAllBytes(source)).Revision };
         }
 
         File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(new { apps = apps.ToDictionary(i => i.Key, i => new { revision = i.Value.Revision }) }));

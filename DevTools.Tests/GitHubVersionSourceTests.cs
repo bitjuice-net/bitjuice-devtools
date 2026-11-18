@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using DevTools.Installation;
+using DevTools.Installation.Models;
 using Xunit;
 
 namespace DevTools.Tests;

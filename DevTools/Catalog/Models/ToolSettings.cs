@@ -1,4 +1,4 @@
-﻿namespace DevTools.Catalog;
+﻿namespace DevTools.Catalog.Models;
 
 public class ToolSettings
 {

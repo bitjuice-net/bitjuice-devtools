@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace DevTools.Sources;
+namespace DevTools.Sources.Models;
 
 public class FetchedApp
 {
