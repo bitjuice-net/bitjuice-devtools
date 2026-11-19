@@ -9,7 +9,7 @@ namespace DevTools.Tests;
 
 internal static class TestTools
 {
-    public const string CacheFile = "cache.json";
+    public const string CacheFile = "cache/apps.json";
 
     public static ToolDefinition Definition(string name, string version)
     {

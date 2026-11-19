@@ -9,7 +9,7 @@ namespace DevTools.Catalog;
 
 public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 {
-    private static readonly string FileName = PathUtils.GetCachePath("cache.json");
+    private static readonly string FileName = PathUtils.GetCachePath("apps.json");
     private static readonly string SnapshotFileName = PathUtils.GetCachePath("scan.json");
 
     private static readonly EnumerationOptions ScanOptions = new()

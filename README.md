@@ -142,12 +142,12 @@ Next to devtools, `config` keeps what you chose and `cache` what devtools can re
 | File | |
 |---|---|
 | `config/settings.json` | settings, e.g. `rootPath` and `githubToken` |
-| `config/tools.json` | selected and disabled versions |
+| `config/apps.json` | selected and disabled versions |
 | `config/sources.json` | manifest repositories |
-| `cache/cache.json` | applications found in the tools directory |
+| `cache/apps.json` | applications found in the tools directory |
 | `cache/scan.json` | times of the scanned directories and `.app` files, a change makes the next command scan again |
 | `cache/versions.json` | versions found by the version sources, kept for an hour |
-| `cache/indexes.json` | the lists of the repositories, downloaded again after a day or by `dt source sync` |
+| `cache/sources.json` | the lists of the repositories, downloaded again after a day or by `dt source sync` |
 | `cache/state` | changes on every save, `dt` reloads the console only when it changed |
 
 Any file in `cache`, or the whole directory, may be deleted, the next command rebuilds it.

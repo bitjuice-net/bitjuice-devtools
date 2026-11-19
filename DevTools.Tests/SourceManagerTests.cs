@@ -43,7 +43,7 @@ public sealed class SourceManagerTests : IDisposable
         repo = Directory.CreateDirectory(Path.Combine(temp, "repo")).FullName;
         other = Directory.CreateDirectory(Path.Combine(temp, "other")).FullName;
         sources = new SourceManager(Options.Create(new Settings { RootPath = root }), storage, new ToolDefinitionProvider(storage), client);
-        storage.Save("sources.json", new SourcesState { Repositories = new List<string> { repo } });
+        storage.Save("config/sources.json", new SourcesState { Repositories = new List<string> { repo } });
     }
 
     public void Dispose()
@@ -129,7 +129,7 @@ public sealed class SourceManagerTests : IDisposable
         Index(other);
         Manifest(repo, "age", 2);
         Index(repo);
-        storage.Save("sources.json", new SourcesState { Repositories = new List<string> { other, repo } });
+        storage.Save("config/sources.json", new SourcesState { Repositories = new List<string> { other, repo } });
 
         Refresh("age");
 
@@ -149,7 +149,7 @@ public sealed class SourceManagerTests : IDisposable
         Index(repo);
         Manifest(other, "age", second);
         Index(other);
-        storage.Save("sources.json", new SourcesState { Repositories = new List<string> { repo, other } });
+        storage.Save("config/sources.json", new SourcesState { Repositories = new List<string> { repo, other } });
 
         Refresh("age");
 
@@ -164,7 +164,7 @@ public sealed class SourceManagerTests : IDisposable
         Refresh("age");
         Manifest(other, "age", 5);
         Index(other);
-        storage.Load<SourcesState>("sources.json").Repositories.Add(other);
+        storage.Load<SourcesState>("config/sources.json").Repositories.Add(other);
 
         Refresh("age");
 
@@ -324,7 +324,7 @@ public sealed class SourceManagerTests : IDisposable
         TestTools.CaptureConsole(() => sources.Add(other));
         TestTools.CaptureConsole(() => sources.Remove(repo));
 
-        Assert.Equal(new[] { other }, storage.Load<SourcesState>("sources.json").Repositories);
+        Assert.Equal(new[] { other }, storage.Load<SourcesState>("config/sources.json").Repositories);
     }
 
     [Theory]
@@ -362,10 +362,10 @@ public sealed class SourceManagerTests : IDisposable
     {
         var state = Path.Combine(temp, "cache", "state");
         var storage = new JsonStorage(state);
-        storage.Save(Path.Combine(temp, "config", "tools.json"), new Dictionary<string, string>());
+        storage.Save(Path.Combine(temp, "config", "apps.json"), new Dictionary<string, string>());
         var first = JsonStorage.ReadState(state);
         System.Threading.Thread.Sleep(1);
-        storage.Save(Path.Combine(temp, "config", "tools.json"), new Dictionary<string, string>());
+        storage.Save(Path.Combine(temp, "config", "apps.json"), new Dictionary<string, string>());
 
         Assert.NotEqual("", first);
         Assert.NotEqual(first, JsonStorage.ReadState(state));

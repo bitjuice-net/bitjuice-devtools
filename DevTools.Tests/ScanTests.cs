@@ -308,7 +308,7 @@ public sealed class ScanTests : IDisposable
         definitions.Scan(root);
         Assert.True(definitions.IsUpToDate(root));
 
-        storage.Save("scan.json", new DevTools.Catalog.Models.ScanSnapshot());
+        storage.Save("cache/scan.json", new DevTools.Catalog.Models.ScanSnapshot());
 
         Assert.False(definitions.IsUpToDate(root));
     }

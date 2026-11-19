@@ -894,7 +894,7 @@ public sealed class ToolInstallerTests : IDisposable
                   "install": { "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "tool.zip" }, { "type": "extract" } ] } }
                 """);
             File.WriteAllText(Path.Combine(repo, "index.json"), """{ "apps": { "tool": { "revision": 1 } } }""");
-            storage.Save("sources.json", new SourcesState { Repositories = new List<string> { repo } });
+            storage.Save("config/sources.json", new SourcesState { Repositories = new List<string> { repo } });
             var options = Options.Create(new Settings { RootPath = root });
             var sources = new SourceManager(options, storage, definitions, new RepositoryClient(new System.Net.Http.HttpClient()));
             var withSources = new ToolManager(options, definitions, settings, new Lazy<IToolInstaller>(() => new ToolInstaller(storage, versions, downloader, platform)), new Lazy<ISourceManager>(sources));
