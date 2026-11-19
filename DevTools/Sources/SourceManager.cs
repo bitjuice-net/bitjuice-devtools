@@ -15,7 +15,7 @@ using Microsoft.Extensions.Options;
 
 namespace DevTools.Sources;
 
-// Manifest repositories: a directory per application with its .app, and index.json with their revisions.
+// Manifest repositories: apps/<application>.app for every application, and index.json with their revisions.
 // The indexes are kept in data/indexes.json, `source sync` gets them again.
 // A fetched .app records its repository in origin, so the tools directory alone knows where it came from.
 public partial class SourceManager(IOptions<Settings> options, IStorage storage, IToolDefinitionProvider definitions, IRepositoryClient client, TimeProvider time = null)
@@ -242,10 +242,11 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     // Returns false when the file already has that content.
     private bool Write(string application, string repository, int revision, string directory)
     {
-        var content = Download(repository, $"{application}/{ToolManifest.FileName}")
-            ?? throw new InvalidOperationException($"{repository} lists {application} but has no `{application}/{ToolManifest.FileName}`, `source sync` gets its newest list");
+        var path = ManifestPath(application);
+        var content = Download(repository, path)
+            ?? throw new InvalidOperationException($"{repository} lists {application} but has no `{path}`, `source sync` gets its newest list");
 
-        var location = $"{repository}/{application}";
+        var location = $"{repository}/{path}";
         var manifest = JsonStorage.Parse<ToolManifest>(content);
         Validate(manifest, application, location);
 
@@ -261,18 +262,24 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             ["sha256"] = ManifestHash.Compute(json)
         };
 
-        var path = Path.Combine(directory, ToolManifest.FileName);
+        var fileName = Path.Combine(directory, ToolManifest.FileName);
         var text = json.ToJsonString(Indented);
-        if (File.Exists(path) && File.ReadAllText(path) == text)
+        if (File.Exists(fileName) && File.ReadAllText(fileName) == text)
             return false;
 
         Directory.CreateDirectory(directory);
-        var temporary = path + ".tmp";
+        var temporary = fileName + ".tmp";
         File.WriteAllText(temporary, text);
-        File.Move(temporary, path, overwrite: true);
+        File.Move(temporary, fileName, overwrite: true);
 
         Console.WriteLine($"{application}: manifest at revision {manifest.Revision} from {repository}");
         return true;
+    }
+
+    // A repository keeps the manifests in apps/<application>.app, next to index.json.
+    public static string ManifestPath(string application)
+    {
+        return $"apps/{application}{ToolManifest.FileName}";
     }
 
     private byte[] Download(string repository, string path)

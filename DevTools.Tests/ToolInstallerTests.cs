@@ -886,10 +886,10 @@ public sealed class ToolInstallerTests : IDisposable
     [Fact]
     public void Install_FetchesManifestsOfUnknownApplicationFromSources()
     {
-        var repo = Directory.CreateDirectory(Path.Combine(root, "..", Path.GetFileName(root) + "-repo", "tool")).Parent!.FullName;
+        var repo = Directory.CreateDirectory(Path.Combine(root, "..", Path.GetFileName(root) + "-repo", "apps")).Parent!.FullName;
         try
         {
-            File.WriteAllText(Path.Combine(repo, "tool", ".app"), """
+            File.WriteAllText(Path.Combine(repo, "apps", "tool.app"), """
                 { "name": "tool", "revision": 1, "versioned": true, "paths": ["%APPDIR%"],
                   "install": { "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "tool.zip" }, { "type": "extract" } ] } }
                 """);

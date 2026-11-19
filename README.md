@@ -120,7 +120,7 @@ dt source add owner/repo             add a repository on GitHub, or a full local
 dt source sync                       get the newest lists of applications of all repositories now
 ```
 
-A repository has a directory per application with its `.app`, and `index.json` in its root with the revision
+A repository has `apps/<application>.app` for every application, and `index.json` in its root with the revision
 of every application:
 
 ```json

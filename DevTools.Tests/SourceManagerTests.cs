@@ -53,8 +53,7 @@ public sealed class SourceManagerTests : IDisposable
 
     private static void Manifest(string repository, string name, int revision, string extra = "")
     {
-        var directory = Directory.CreateDirectory(Path.Combine(repository, name)).FullName;
-        File.WriteAllText(Path.Combine(directory, ".app"), $$"""
+        File.WriteAllText(RepositoryFile(repository, name), $$"""
             { "name": "{{name}}", "revision": {{revision}}, "versioned": true, "paths": ["%APPDIR%"]{{extra}},
               "install": { "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "*" } ] } }
             """);
@@ -64,14 +63,16 @@ public sealed class SourceManagerTests : IDisposable
     private static void Index(string repository)
     {
         var apps = new Dictionary<string, IndexEntry>();
-        foreach (var directory in Directory.GetDirectories(repository))
-        {
-            var manifest = Path.Combine(directory, ".app");
-            if (File.Exists(manifest))
-                apps[Path.GetFileName(directory)] = new IndexEntry { Revision = JsonStorage.Parse<ToolManifest>(File.ReadAllBytes(manifest)).Revision };
-        }
+        foreach (var manifest in Directory.CreateDirectory(Path.Combine(repository, "apps")).GetFiles("*.app").Select(i => i.FullName))
+            apps[Path.GetFileNameWithoutExtension(manifest)] = new IndexEntry { Revision = JsonStorage.Parse<ToolManifest>(File.ReadAllBytes(manifest)).Revision };
 
         File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(new { apps = apps.ToDictionary(i => i.Key, i => new { revision = i.Value.Revision }) }));
+    }
+
+    private static string RepositoryFile(string repository, string name)
+    {
+        Directory.CreateDirectory(Path.Combine(repository, "apps"));
+        return Path.Combine(repository, SourceManager.ManifestPath(name));
     }
 
     private string Local(string name, string file)
@@ -112,8 +113,7 @@ public sealed class SourceManagerTests : IDisposable
     [InlineData("""{ "name": "age", "revision": 1, "versioned": true }""", "no install section")]
     public void Refresh_RejectsInvalidManifests(string app, string message)
     {
-        var directory = Directory.CreateDirectory(Path.Combine(repo, "age")).FullName;
-        File.WriteAllText(Path.Combine(directory, ".app"), app);
+        File.WriteAllText(RepositoryFile(repo, "age"), app);
         File.WriteAllText(Path.Combine(repo, RepositoryIndex.FileName), """{ "apps": { "age": { "revision": 1 } } }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
