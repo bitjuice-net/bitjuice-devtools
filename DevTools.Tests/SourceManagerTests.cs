@@ -360,14 +360,15 @@ public sealed class SourceManagerTests : IDisposable
     [Fact]
     public void JsonStorage_SaveWritesANewState()
     {
-        var storage = new JsonStorage();
-        storage.Save(Path.Combine(temp, "data", "tools.json"), new Dictionary<string, string>());
-        var first = JsonStorage.ReadState(Path.Combine(temp, "data"));
+        var state = Path.Combine(temp, "cache", "state");
+        var storage = new JsonStorage(state);
+        storage.Save(Path.Combine(temp, "config", "tools.json"), new Dictionary<string, string>());
+        var first = JsonStorage.ReadState(state);
         System.Threading.Thread.Sleep(1);
-        storage.Save(Path.Combine(temp, "data", "tools.json"), new Dictionary<string, string>());
+        storage.Save(Path.Combine(temp, "config", "tools.json"), new Dictionary<string, string>());
 
         Assert.NotEqual("", first);
-        Assert.NotEqual(first, JsonStorage.ReadState(Path.Combine(temp, "data")));
+        Assert.NotEqual(first, JsonStorage.ReadState(state));
     }
 
     [Fact]

@@ -16,14 +16,14 @@ using Microsoft.Extensions.Options;
 namespace DevTools.Sources;
 
 // Manifest repositories: apps/<application>.app for every application, and index.json with their revisions.
-// The indexes are kept in data/indexes.json, `source sync` gets them again.
+// The indexes are kept in cache/indexes.json, `source sync` gets them again.
 // A fetched .app records its repository in origin, so the tools directory alone knows where it came from.
 public partial class SourceManager(IOptions<Settings> options, IStorage storage, IToolDefinitionProvider definitions, IRepositoryClient client, TimeProvider time = null)
     : ISourceManager
 {
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
-    private static readonly string FileName = PathUtils.GetDataPath("sources.json");
-    private static readonly string IndexesFileName = PathUtils.GetDataPath("indexes.json");
+    private static readonly string FileName = PathUtils.GetConfigPath("sources.json");
+    private static readonly string IndexesFileName = PathUtils.GetCachePath("indexes.json");
 
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 

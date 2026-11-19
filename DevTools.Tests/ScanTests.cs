@@ -268,12 +268,12 @@ public sealed class ScanTests : IDisposable
     public void IsUpToDate_NoticesNewVersionsAndEditedManifests()
     {
         Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
-        Dirs("java/1.0.0", "devtools/data");
+        Dirs("java/1.0.0", "devtools/cache");
         Age();
         definitions.Scan(root);
         Assert.True(definitions.IsUpToDate(root));
 
-        File.WriteAllText(Path.Combine(root, "devtools", "data", "state"), "1");
+        File.WriteAllText(Path.Combine(root, "devtools", "cache", "state"), "1");
         Assert.True(definitions.IsUpToDate(root));
 
         Dirs("java/2.0.0");
@@ -298,6 +298,42 @@ public sealed class ScanTests : IDisposable
         var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("java "));
 
         Assert.Contains("1.0.0, 2.0.0", row);
+    }
+
+    [Fact]
+    public void IsUpToDate_IsFalseWithoutTheSnapshot()
+    {
+        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        Age();
+        definitions.Scan(root);
+        Assert.True(definitions.IsUpToDate(root));
+
+        storage.Save("scan.json", new DevTools.Catalog.Models.ScanSnapshot());
+
+        Assert.False(definitions.IsUpToDate(root));
+    }
+
+    [Fact]
+    public void ApplicationWithoutVersions_IsListedAndShown()
+    {
+        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        var tools = new ToolSettingsProvider(storage, definitions);
+        var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, tools, null);
+
+        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("java "));
+        var details = TestTools.CaptureConsole(() => manager.Show("java"));
+        var error = Assert.Throws<InvalidOperationException>(() => manager.Select("java", "latest"));
+
+        Assert.Contains("not installed", row);
+        Assert.Contains(Path.Combine(root, "java"), details);
+        Assert.Contains("none, `app install java` installs one", details);
+        Assert.Contains("has no installed versions", error.Message);
+        Assert.Empty(tools.GetApplications());
+
+        Dirs("java/1.0.0");
+        definitions.Scan(root);
+
+        Assert.Equal("latest", tools.GetSettings("java").Version);
     }
 
     [Fact]

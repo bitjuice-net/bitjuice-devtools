@@ -3,4 +3,4 @@ bin
 obj
 publish
 *.user
-/DevTools/data/settings.json
+/DevTools/config/settings.json

@@ -6,13 +6,13 @@ using DevTools.Installation.Models;
 
 namespace DevTools.Installation;
 
-// Versions found by a version source, kept for an hour in data/versions.json.
+// Versions found by a version source, kept for an hour in cache/versions.json.
 // Updating every application would otherwise ask GitHub again each time and soon hit its rate limit.
 public class VersionCache(IStorage storage, TimeProvider time = null)
 {
     public static readonly TimeSpan Duration = TimeSpan.FromHours(1);
 
-    private static readonly string FileName = PathUtils.GetDataPath("versions.json");
+    private static readonly string FileName = PathUtils.GetCachePath("versions.json");
 
     private readonly TimeProvider time = time ?? TimeProvider.System;
 

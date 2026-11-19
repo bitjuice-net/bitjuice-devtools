@@ -75,7 +75,7 @@ public class GitHubVersionSource(HttpClient client, IOptions<Settings> options =
         using var response = await client.SendAsync(request);
 
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
-            throw new InvalidOperationException($"GitHub refused the request for {repo} ({(int)response.StatusCode}). The API rate limit may be exceeded, set githubToken in data/settings.json to raise it.");
+            throw new InvalidOperationException($"GitHub refused the request for {repo} ({(int)response.StatusCode}). The API rate limit may be exceeded, set githubToken in config/settings.json to raise it.");
 
         if (response.StatusCode == HttpStatusCode.UnprocessableEntity && page > 1)
             return null;

@@ -22,7 +22,8 @@ public class MetaVersionTests
     {
         definitions = new ToolDefinitionProvider(storage);
         settings = new ToolSettingsProvider(storage, definitions);
-        manager = new ToolManager(Options.Create(new Settings()), definitions, settings, null);
+        // A tools directory that does not exist, so commands use the prepared cache instead of scanning.
+        manager = new ToolManager(Options.Create(new Settings { RootPath = Path.Combine(Path.GetTempPath(), "devtools-missing-" + Guid.NewGuid().ToString("N")) }), definitions, settings, null);
     }
 
     [Theory]

@@ -214,7 +214,7 @@ public class ShellScriptsTests
     {
         var script = ShellScripts.Hook(shell, "/opt/devtools/devtools");
 
-        Assert.EndsWith(System.IO.Path.Combine("devtools", "data", "state"), ShellScripts.StateFile("/opt/devtools/devtools"));
+        Assert.EndsWith(System.IO.Path.Combine("devtools", "cache", "state"), ShellScripts.StateFile("/opt/devtools/devtools"));
         Assert.Contains($"IFS= read -r state < '{ShellScripts.StateFile("/opt/devtools/devtools")}'", script);
         Assert.Contains("[ \"$state\" = \"${DT_STATE-}\" ] || _dt_reload", script);
     }

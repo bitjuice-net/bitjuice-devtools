@@ -8,6 +8,17 @@ namespace DevTools.Infrastructure;
 
 public class JsonStorage : IStorage
 {
+    private readonly string stateFile;
+
+    public JsonStorage() : this(PathUtils.StateFile)
+    {
+    }
+
+    public JsonStorage(string stateFile)
+    {
+        this.stateFile = stateFile;
+    }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         AllowOutOfOrderMetadataProperties = true,
@@ -33,9 +44,7 @@ public class JsonStorage : IStorage
         return JsonSerializer.Deserialize<T>(json, Options);
     }
 
-    public const string StateFileName = "state";
-
-    // A save also writes a new stamp to `state`, so shells reload PATH and variables only after a change.
+    // A save also writes a new stamp to the state file, so shells reload PATH and variables only after a change.
     public void Save<T>(string fileName, T obj, bool changesState = true) where T : new()
     {
         var directory = Path.GetDirectoryName(fileName)!;
@@ -43,12 +52,14 @@ public class JsonStorage : IStorage
         File.WriteAllText(fileName, JsonSerializer.Serialize(obj, Options));
 
         if (changesState)
-            File.WriteAllText(Path.Combine(directory, StateFileName), DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture));
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(stateFile)!);
+            File.WriteAllText(stateFile, DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture));
+        }
     }
 
-    public static string ReadState(string directory)
+    public static string ReadState(string stateFile)
     {
-        var file = Path.Combine(directory, StateFileName);
-        return File.Exists(file) ? File.ReadAllText(file).Trim() : "";
+        return File.Exists(stateFile) ? File.ReadAllText(stateFile).Trim() : "";
     }
 }

@@ -9,8 +9,8 @@ namespace DevTools.Catalog;
 
 public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 {
-    private static readonly string FileName = PathUtils.GetDataPath("cache.json");
-    private static readonly string SnapshotFileName = PathUtils.GetDataPath("scan.json");
+    private static readonly string FileName = PathUtils.GetCachePath("cache.json");
+    private static readonly string SnapshotFileName = PathUtils.GetCachePath("scan.json");
 
     private static readonly EnumerationOptions ScanOptions = new()
     {
@@ -64,7 +64,10 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 
         ThrowOnDuplicateVersions(apps);
 
-        var scannedTools = apps.GroupBy(i => i.Manifest.Name).ToDictionary(i => i.Key, i => i.ToList());
+        // An application without installed versions is known too, with an empty list.
+        var scannedTools = found.Select(i => i.Manifest.Name).Distinct().ToDictionary(i => i, _ => new List<ToolDefinition>());
+        foreach (var app in apps)
+            scannedTools[app.Manifest.Name].Add(app);
 
         // A scan that finds the same applications changes nothing, shells do not need to reload for it.
         if (!storage.Exists(FileName) || Fingerprint(Tools) != Fingerprint(scannedTools))
@@ -77,7 +80,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
     private static string Fingerprint(Dictionary<string, List<ToolDefinition>> applications)
     {
         return applications.OrderBy(i => i.Key, StringComparer.Ordinal)
-            .SelectMany(i => i.Value.Select(d => $"{i.Key}|{d.Path}|{d.Manifest.Version}|{d.Manifest.Versioned}|{d.Manifest.Paths?.Join(";")}|{d.Manifest.Envs?.Select(e => e.Key + "=" + e.Value).Join(";")}"))
+            .SelectMany(i => i.Value.Select(d => $"{i.Key}|{d.Path}|{d.Manifest.Version}|{d.Manifest.Versioned}|{d.Manifest.Paths?.Join(";")}|{d.Manifest.Envs?.Select(e => e.Key + "=" + e.Value).Join(";")}").Prepend(i.Key))
             .Order(StringComparer.Ordinal)
             .Join("\n");
     }
@@ -88,10 +91,10 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         if (!storage.Exists(FileName))
             return false;
 
-        // A cache written before snapshots existed stays until the next scan writes one.
+        // Without the snapshot nothing tells what changed, so a deleted scan.json means a new scan.
         var snapshot = storage.Load<ScanSnapshot>(SnapshotFileName);
         if (snapshot.Root == null)
-            return true;
+            return false;
 
         // File systems keep times in steps of up to 2 seconds, so a change made right around a scan may keep the time
         // the scan saw. Such entries cannot be trusted and get one more scan, like git does with racily clean files.
@@ -154,6 +157,9 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
     // The directory with the .app of the application, null when there is none.
     public string FindDirectory(string root, string application)
     {
+        if (!Directory.Exists(root))
+            return null;
+
         var directories = Scan(new DirectoryInfo(root)).Where(i => i.Manifest.Name == application).ToList();
 
         if (directories.Count > 1)

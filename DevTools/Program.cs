@@ -23,7 +23,7 @@ internal class Program
         CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
 
         var config = new ConfigurationBuilder()
-            .AddJsonFile(Path.Combine(PathUtils.DataDirectoryName, "settings.json"), optional: true)
+            .AddJsonFile(Path.Combine(PathUtils.ConfigDirectoryName, "settings.json"), optional: true)
             .Build();
 
         try

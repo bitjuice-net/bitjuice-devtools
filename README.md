@@ -28,8 +28,8 @@ D:\Tools
    `devtools shell uninstall` removes it again.
 3. Open a new console. It has the `dt` command, which runs devtools and applies the changes to the console right away.
 
-The tools directory is the parent of the devtools directory. Another one can be set in `data/settings.json`,
-see `data/settings.example.json`.
+The tools directory is the parent of the devtools directory. Another one can be set in `config/settings.json`,
+see `config/settings.example.json`.
 
 ## Everyday use
 
@@ -61,7 +61,7 @@ Versions added or deleted by hand and edited `.app` files are found on their own
 
 ## Manifests
 
-Every application has a `.app` in its directory. The tools directory alone is enough to rebuild the caches in `data`.
+Every application has a `.app` in its directory. The tools directory alone is enough to rebuild `cache`.
 
 ```json
 {
@@ -100,7 +100,7 @@ Every application has a `.app` in its directory. The tools directory alone is en
   and in `versions.url` and `versions.pattern`. `osNames` and `archNames` map them to the names a project uses.
   `os` and `arch` on a step run it only on that system or architecture.
 
-GitHub allows 60 API requests an hour without a token. A token in `data/settings.json` raises the limit and opens private
+GitHub allows 60 API requests an hour without a token. A token in `config/settings.json` raises the limit and opens private
 manifest repositories, the `GITHUB_TOKEN` variable is used when the settings have none. A token without any scopes is
 enough for public repositories.
 
@@ -135,20 +135,22 @@ repository keeps the previous one. These commands bring the manifest of an appli
 - A fetched manifest changed by hand is kept, `dt ls <app>` shows it as changed locally.
   `dt app reset <app>` replaces it with the one from the repository.
 
-## Data
+## Configuration and cache
 
-Settings and state are in `data` next to devtools:
+Next to devtools, `config` keeps what you chose and `cache` what devtools can rebuild:
 
 | File | |
 |---|---|
-| `settings.json` | settings, e.g. `rootPath` |
-| `tools.json` | selected and disabled versions |
-| `cache.json` | applications found in the tools directory |
-| `scan.json` | times of the scanned directories and `.app` files, a change makes the next command scan again |
-| `versions.json` | versions found by the version sources, kept for an hour |
-| `sources.json` | manifest repositories |
-| `indexes.json` | the lists of the repositories, downloaded again after a day or by `dt source sync` |
-| `state` | changes on every save, `dt` reloads the console only when it changed |
+| `config/settings.json` | settings, e.g. `rootPath` and `githubToken` |
+| `config/tools.json` | selected and disabled versions |
+| `config/sources.json` | manifest repositories |
+| `cache/cache.json` | applications found in the tools directory |
+| `cache/scan.json` | times of the scanned directories and `.app` files, a change makes the next command scan again |
+| `cache/versions.json` | versions found by the version sources, kept for an hour |
+| `cache/indexes.json` | the lists of the repositories, downloaded again after a day or by `dt source sync` |
+| `cache/state` | changes on every save, `dt` reloads the console only when it changed |
+
+Any file in `cache`, or the whole directory, may be deleted, the next command rebuilds it.
 
 ## Building
 

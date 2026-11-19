@@ -15,7 +15,7 @@ public static partial class ShellScripts
     public const string EnvsVariable = "DT_ENVS";
     public const string InitializedVariable = "DT_INITIALIZED";
 
-    // The stamp of data/state the shell last loaded, `dt` reloads only when the file has another one.
+    // The stamp of cache/state the shell last loaded, `dt` reloads only when the file has another one.
     public const string StateVariable = "DT_STATE";
 
     // Windows only has cmd integration. Elsewhere $SHELL is the login shell of the user, the one their terminals start.
@@ -97,7 +97,7 @@ public static partial class ShellScripts
 
     public static string StateFile(string executable)
     {
-        return Path.Combine(Path.GetDirectoryName(executable) ?? "", PathUtils.DataDirectoryName, JsonStorage.StateFileName);
+        return Path.Combine(Path.GetDirectoryName(executable) ?? "", PathUtils.CacheDirectoryName, PathUtils.StateFileName);
     }
 
     public static string RcLine(Shell shell, string executable)

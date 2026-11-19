@@ -136,7 +136,7 @@ public class GitHubVersionSourceTests
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => source.GetVersionsAsync(new VersionSource { Type = "github-tags", Repo = "a/b" }));
 
-        Assert.Contains("githubToken in data/settings.json", error.Message);
+        Assert.Contains("githubToken in config/settings.json", error.Message);
     }
 
     [Fact]

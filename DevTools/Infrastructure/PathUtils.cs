@@ -7,13 +7,26 @@ public class PathUtils
 {
     public static string AssemblyDirectory => Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty);
 
-    // Settings and state of devtools, apart from the program itself.
-    public const string DataDirectoryName = "data";
+    // Settings and choices of the user, they cannot be rebuilt.
+    public const string ConfigDirectoryName = "config";
 
-    public static string GetDataPath(string fileName)
+    // Everything devtools can rebuild, any file may be deleted.
+    public const string CacheDirectoryName = "cache";
+
+    public const string StateFileName = "state";
+
+    public static string GetConfigPath(string fileName)
     {
-        return Path.Combine(AssemblyDirectory, DataDirectoryName, fileName);
+        return Path.Combine(AssemblyDirectory, ConfigDirectoryName, fileName);
     }
+
+    public static string GetCachePath(string fileName)
+    {
+        return Path.Combine(AssemblyDirectory, CacheDirectoryName, fileName);
+    }
+
+    // Changes whenever something shells load changes, so `dt` reloads them only then.
+    public static string StateFile => GetCachePath(StateFileName);
 
     public static string GetRootedPath(string path)
     {

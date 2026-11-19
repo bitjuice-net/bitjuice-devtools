@@ -19,11 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="data\settings.example.json">
+    <None Update="config\settings.example.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <!-- Settings of the development machine, not part of the package. -->
-    <None Update="data\settings.json">
+    <None Update="config\settings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>

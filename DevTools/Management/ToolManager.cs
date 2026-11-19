@@ -43,7 +43,7 @@ public class ToolManager(
         // devtools itself (and dt.cmd next to it) stays on PATH after the tools.
         var paths = pathBuilder.Values.Append(PathUtils.AssemblyDirectory);
 
-        Console.WriteLine(ShellScripts.Env(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable, JsonStorage.ReadState(Path.Combine(PathUtils.AssemblyDirectory, PathUtils.DataDirectoryName))));
+        Console.WriteLine(ShellScripts.Env(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable, JsonStorage.ReadState(PathUtils.StateFile)));
     }
 
     public void Scan()
@@ -82,7 +82,7 @@ public class ToolManager(
             if (!versions.Any())
             {
                 toolSettingsProvider.RemoveSettings(application);
-                Console.WriteLine($"Removed settings of {application}: application not found");
+                Console.WriteLine($"Removed settings of {application}: {(IsKnown(application) ? "no installed versions" : "application not found")}");
                 pruned++;
                 continue;
             }
@@ -142,7 +142,7 @@ public class ToolManager(
     {
         Scan();
 
-        var names = toolDefinitionProvider.GetNames().Where(HasSource).ToList();
+        var names = toolDefinitionProvider.GetNames().Where(i => toolDefinitionProvider.GetVersions(i).Any() && HasSource(i)).ToList();
         if (names.Count == 0)
         {
             Console.WriteLine("No application has an install section, `app install` gets one from the sources");
@@ -278,11 +278,17 @@ public class ToolManager(
 
     public void Show(string application)
     {
-        var versions = FindVersions(application);
+        EnsureScanned();
+        if (!IsKnown(application))
+            throw NotFound(application);
+
+        var versions = toolDefinitionProvider.GetVersions(application);
         var toolSettings = toolSettingsProvider.GetSettings(application);
         var selected = toolSettings.Version != null ? toolDefinitionProvider.GetVersion(application, toolSettings.Version) : null;
         var versioned = !IsNotVersioned(application);
-        var directory = versioned ? Path.GetDirectoryName(versions[0].Path) : versions[0].Path;
+        var directory = versions.Count == 0
+            ? toolDefinitionProvider.FindDirectory(PathUtils.GetRootedPath(settings.RootPath), application)
+            : versioned ? Path.GetDirectoryName(versions[0].Path) : versions[0].Path;
 
         var rows = new List<(string Name, string Value)>
         {
@@ -293,7 +299,7 @@ public class ToolManager(
         if (versioned)
         {
             rows.Add(("selected", FormatVersion(application, toolSettings.Version)));
-            rows.Add(("versions", versions.Select(i => i.Manifest.Version).Reverse().Join(", ")));
+            rows.Add(("versions", versions.Count > 0 ? versions.Select(i => i.Manifest.Version).Reverse().Join(", ") : $"none, `app install {application}` installs one"));
         }
 
         if (selected != null)
@@ -381,10 +387,23 @@ public class ToolManager(
     {
         EnsureScanned();
         var versions = toolDefinitionProvider.GetVersions(application);
-        if (versions.Count == 0)
-            throw new InvalidOperationException($"{application} not found, `ls` lists the applications and `sc` finds new ones");
+        if (versions.Count > 0)
+            return versions;
 
-        return versions;
+        if (IsKnown(application))
+            throw new InvalidOperationException($"{application} has no installed versions, `app install {application}` installs one");
+
+        throw NotFound(application);
+    }
+
+    private bool IsKnown(string application)
+    {
+        return toolDefinitionProvider.GetNames().Contains(application);
+    }
+
+    private static InvalidOperationException NotFound(string application)
+    {
+        return new InvalidOperationException($"{application} not found, `ls` lists the applications and `sc` finds new ones");
     }
 
     private string FormatVersion(string application, string version)
@@ -412,7 +431,7 @@ public class ToolManager(
     private string GetStatus(string application, ToolSettings toolSettings)
     {
         if (!toolDefinitionProvider.GetVersions(application).Any())
-            return "orphaned";
+            return IsKnown(application) ? "not installed" : "orphaned";
 
         if (toolSettings.Version != null && toolDefinitionProvider.GetVersion(application, toolSettings.Version) == null)
             return "orphaned";
