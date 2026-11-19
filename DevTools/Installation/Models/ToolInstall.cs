@@ -1,14 +1,10 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace DevTools.Installation.Models;
 
-public class ToolSource
+// The install section of .app: where the versions come from and how a version is installed.
+public class ToolInstall
 {
-    public const string FileName = ".source";
-
-    // Bumped in a manifest repository whenever .app or .source of the application changes.
-    public int Revision { get; set; }
-
     public VersionSource Versions { get; set; }
 
     // Names used by the project in place of the devtools ones for {os} and {arch}, e.g. "x64": "amd64".

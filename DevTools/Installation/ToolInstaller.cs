@@ -7,6 +7,7 @@ using System.Linq;
 using System.Formats.Tar;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
 using DevTools.Installation.Models;
 using SharpCompress.Archives.SevenZip;
@@ -47,7 +48,7 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         var source = LoadSource(directory);
         var steps = source.Steps.Where(Runs).ToList();
         if (steps.Count == 0)
-            throw new InvalidOperationException($"`{Path.Combine(directory, ToolSource.FileName)}` has no steps for {platform.Os} {platform.Arch}");
+            throw new InvalidOperationException($"`{Path.Combine(directory, ToolManifest.FileName)}` has no install steps for {platform.Os} {platform.Arch}");
 
         Func<string, string> expand = value => Expand(value, source, version);
         var target = Path.Combine(directory, version.Version);
@@ -129,18 +130,19 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         directory.Delete();
     }
 
-    private ToolSource LoadSource(string directory)
+    private ToolInstall LoadSource(string directory)
     {
-        var fileName = Path.Combine(directory, ToolSource.FileName);
-        var source = storage.Load<ToolSource>(fileName);
+        var fileName = Path.Combine(directory, ToolManifest.FileName);
+        var install = storage.Load<ToolManifest>(fileName).Install
+            ?? throw new InvalidOperationException($"`{fileName}` has no install section");
 
-        if (source.Versions == null)
-            throw new InvalidOperationException($"`{fileName}` does not define versions");
+        if (install.Versions == null)
+            throw new InvalidOperationException($"`{fileName}` does not define install.versions");
 
-        if (source.Steps == null || source.Steps.Count == 0)
-            throw new InvalidOperationException($"`{fileName}` does not define steps");
+        if (install.Steps == null || install.Steps.Count == 0)
+            throw new InvalidOperationException($"`{fileName}` does not define install.steps");
 
-        return source;
+        return install;
     }
 
     private bool Runs(InstallStep step)
@@ -306,7 +308,7 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
             File.Move(from, to);
     }
 
-    // Paths from .source files and archives may use \ or /, and mean the same on every system.
+    // Paths from install sections and archives may use \ or /, and mean the same on every system.
     private static string GetSafePath(string work, string relative)
     {
         var normalized = relative.Replace('\\', '/');
@@ -329,12 +331,12 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
         return new InvalidOperationException($"Path `{relative}` is outside of the installation directory");
     }
 
-    private string Expand(string value, ToolSource source, RemoteVersion version)
+    private string Expand(string value, ToolInstall source, RemoteVersion version)
     {
         return ExpandPlatform(value, source).Replace("{version}", version.SourceVersion ?? version.Version).Replace("{tag}", version.Tag);
     }
 
-    private string ExpandPlatform(string value, ToolSource source)
+    private string ExpandPlatform(string value, ToolInstall source)
     {
         return value?
             .Replace("{os}", source.OsNames?.GetValueOrDefault(platform.Os) ?? platform.Os)

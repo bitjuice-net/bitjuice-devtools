@@ -46,6 +46,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         cmd.Subcommands.Add(BuildInstallCommand());
         cmd.Subcommands.Add(BuildUpdateCommand());
         cmd.Subcommands.Add(BuildRemoveCommand());
+        cmd.Subcommands.Add(BuildResetCommand());
         return cmd;
     }
 
@@ -59,7 +60,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
 
     private Command BuildSourceCommand()
     {
-        var cmd = new Command("source", "Repositories of .app and .source files used by `app install` and `app update`.");
+        var cmd = new Command("source", "Repositories of .app files used by `app install` and `app update`.");
 
         var addArgument = new Argument<string>("repository") { Description = "owner/repo on GitHub or a full directory path." };
         var add = new Command("add", "Add a manifest repository.") { addArgument };
@@ -159,7 +160,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         var applicationArgument = new Argument<string>("application")
         {
             Arity = ArgumentArity.ZeroOrOne,
-            Description = "Without it every application with a .source is updated."
+            Description = "Without it every application with an install section is updated."
         };
         var refreshOption = RefreshOption();
         var cmd = new Command("update", "Install the newest version when it is newer than the installed ones.") { applicationArgument, refreshOption };
@@ -186,6 +187,14 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         var cmd = new Command("remove", "Delete an installed version of an application.") { applicationArgument, versionArgument };
         cmd.Aliases.Add("rm");
         cmd.SetAction(result => manager.Remove(result.GetValue(applicationArgument), result.GetValue(versionArgument)));
+        return cmd;
+    }
+
+    private Command BuildResetCommand()
+    {
+        var applicationArgument = new Argument<string>("application");
+        var cmd = new Command("reset", "Replace .app of an application with the one from its source, dropping local changes.") { applicationArgument };
+        cmd.SetAction(result => sources.Value.Reset(result.GetValue(applicationArgument)));
         return cmd;
     }
 

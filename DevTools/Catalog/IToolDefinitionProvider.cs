@@ -12,4 +12,5 @@ public interface IToolDefinitionProvider
     bool IsUpToDate(string root);
     string FindSourceDirectory(string root, string application);
     string FindDirectory(string root, string application);
+    ToolManifest GetManifest(string root, string application);
 }

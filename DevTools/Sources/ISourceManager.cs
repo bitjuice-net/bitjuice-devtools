@@ -1,5 +1,3 @@
-using DevTools.Sources.Models;
-
 namespace DevTools.Sources;
 
 public interface ISourceManager
@@ -9,10 +7,10 @@ public interface ISourceManager
     void List(string repository);
     void Sync();
 
-    // Where the manifests of an application came from, null when they were not fetched from a source.
-    FetchedApp GetOrigin(string application);
-
-    // Brings .app and .source of an application to the revision in the synced index, before it is installed or updated.
-    // Returns true when a file changed.
+    // Brings .app of an application to the revision in the synced index, before it is installed or updated.
+    // Returns true when the file changed.
     bool Refresh(string application);
+
+    // Replaces .app of an application with the one from its source, local changes included.
+    void Reset(string application);
 }

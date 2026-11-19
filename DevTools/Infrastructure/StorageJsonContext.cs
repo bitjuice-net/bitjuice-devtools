@@ -10,7 +10,7 @@ namespace DevTools.Infrastructure;
 [JsonSerializable(typeof(Dictionary<string, List<ToolDefinition>>))]
 [JsonSerializable(typeof(Dictionary<string, ToolSettings>))]
 [JsonSerializable(typeof(ToolManifest))]
-[JsonSerializable(typeof(ToolSource))]
+
 [JsonSerializable(typeof(SourcesState))]
 [JsonSerializable(typeof(RepositoryIndex))]
 [JsonSerializable(typeof(Dictionary<string, SyncedIndex>))]

@@ -137,7 +137,7 @@ public class ToolManager(
         UpdateOne(application, refresh);
     }
 
-    // Every application with a .source, one that fails does not stop the others.
+    // Every application with an install section, one that fails does not stop the others.
     public void UpdateAll(bool refresh = false)
     {
         Scan();
@@ -145,7 +145,7 @@ public class ToolManager(
         var names = toolDefinitionProvider.GetNames().Where(HasSource).ToList();
         if (names.Count == 0)
         {
-            Console.WriteLine($"No application has a `{ToolSource.FileName}` file, `app install` gets one from the sources");
+            Console.WriteLine("No application has an install section, `app install` gets one from the sources");
             return;
         }
 
@@ -176,8 +176,8 @@ public class ToolManager(
 
     private bool HasSource(string application)
     {
-        var definition = toolDefinitionProvider.GetVersions(application).FirstOrDefault();
-        return definition is { Manifest.Versioned: true } && File.Exists(Path.Combine(Path.GetDirectoryName(definition.Path)!, ToolSource.FileName));
+        var manifest = toolDefinitionProvider.GetManifest(PathUtils.GetRootedPath(settings.RootPath), application);
+        return manifest is { Versioned: true, Install: not null };
     }
 
     private bool UpdateOne(string application, bool refresh)
@@ -315,11 +315,15 @@ public class ToolManager(
 
     private string DescribeSource(string application, string directory)
     {
-        if (!File.Exists(Path.Combine(directory, ToolSource.FileName)))
+        var manifest = toolDefinitionProvider.GetManifest(PathUtils.GetRootedPath(settings.RootPath), application);
+
+        if (manifest?.Install == null)
             return "none, versions are added by hand";
 
-        var origin = sources?.Value.GetOrigin(application);
-        return origin != null ? $"{origin.Repository}, revision {origin.Revision}" : $"local {ToolSource.FileName}";
+        if (manifest.Origin == null)
+            return $"local {ToolManifest.FileName}, revision {Math.Max(1, manifest.Revision)}";
+
+        return $"{manifest.Origin.Repository}, revision {manifest.Revision}" + (ManifestHash.IsModified(Path.Combine(directory, ToolManifest.FileName)) ? ", changed locally" : "");
     }
 
     public void Select(string application, string version)

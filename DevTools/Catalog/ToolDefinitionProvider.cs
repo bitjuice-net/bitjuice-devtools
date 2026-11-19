@@ -4,14 +4,11 @@ using System.IO;
 using System.Linq;
 using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
-using DevTools.Installation.Models;
 
 namespace DevTools.Catalog;
 
 public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 {
-    private const string ManifestFileName = ".app";
-
     private static readonly string FileName = PathUtils.GetDataPath("cache.json");
     private static readonly string SnapshotFileName = PathUtils.GetDataPath("scan.json");
 
@@ -114,7 +111,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 
         foreach (var application in applications)
         {
-            paths.Add(Path.Combine(application.FullName, ManifestFileName));
+            paths.Add(Path.Combine(application.FullName, ToolManifest.FileName));
             for (var directory = application; directory != null && directory.FullName.Length > root.FullName.Length; directory = directory.Parent)
                 paths.Add(directory.FullName);
         }
@@ -131,14 +128,14 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
     public string FindSourceDirectory(string root, string application)
     {
         var directories = Scan(new DirectoryInfo(root))
-            .Where(i => i.Manifest.Name == application && File.Exists(Path.Combine(i.Directory.FullName, ToolSource.FileName)))
+            .Where(i => i.Manifest.Name == application && i.Manifest.Install != null)
             .ToList();
 
         if (directories.Count == 0)
-            throw new InvalidOperationException($"No `{ToolSource.FileName}` file found for {application}");
+            throw new InvalidOperationException($"{application} has no `{ToolManifest.FileName}` with an install section");
 
         if (directories.Count > 1)
-            throw new InvalidOperationException($"More than one `{ToolSource.FileName}` file found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
+            throw new InvalidOperationException($"More than one `{ToolManifest.FileName}` with an install section found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
 
         var (directory, manifest) = directories[0];
         if (!manifest.Versioned)
@@ -147,20 +144,27 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         return directory.FullName;
     }
 
+    // The whole .app of an application, with its install section and origin, null when there is none.
+    public ToolManifest GetManifest(string root, string application)
+    {
+        var directory = FindDirectory(root, application);
+        return directory != null ? storage.Load<ToolManifest>(Path.Combine(directory, ToolManifest.FileName)) : null;
+    }
+
     // The directory with the .app of the application, null when there is none.
     public string FindDirectory(string root, string application)
     {
         var directories = Scan(new DirectoryInfo(root)).Where(i => i.Manifest.Name == application).ToList();
 
         if (directories.Count > 1)
-            throw new InvalidOperationException($"More than one `{ManifestFileName}` file found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
+            throw new InvalidOperationException($"More than one `{ToolManifest.FileName}` file found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
 
         return directories.SingleOrDefault().Directory?.FullName;
     }
 
     private IEnumerable<(DirectoryInfo Directory, ToolManifest Manifest)> Scan(DirectoryInfo directory)
     {
-        var manifestPath = Path.Combine(directory.FullName, ManifestFileName);
+        var manifestPath = Path.Combine(directory.FullName, ToolManifest.FileName);
         if (File.Exists(manifestPath))
         {
             yield return (directory, storage.Load<ToolManifest>(manifestPath));

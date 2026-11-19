@@ -1,12 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using DevTools.Catalog;
+using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
-using DevTools.Installation.Models;
 using DevTools.Sources;
 using DevTools.Sources.Models;
 using Microsoft.Extensions.Options;
@@ -54,19 +54,21 @@ public sealed class SourceManagerTests : IDisposable
     private static void Manifest(string repository, string name, int revision, string extra = "")
     {
         var directory = Directory.CreateDirectory(Path.Combine(repository, name)).FullName;
-        File.WriteAllText(Path.Combine(directory, ".app"), $$"""{ "name": "{{name}}", "versioned": true, "paths": ["%APPDIR%"]{{extra}} }""");
-        File.WriteAllText(Path.Combine(directory, ".source"), $$"""{ "revision": {{revision}}, "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "*" } ] }""");
+        File.WriteAllText(Path.Combine(directory, ".app"), $$"""
+            { "name": "{{name}}", "revision": {{revision}}, "versioned": true, "paths": ["%APPDIR%"]{{extra}},
+              "install": { "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "*" } ] } }
+            """);
     }
 
-    // index.json as the repository maintainer writes it, from the revisions in .source.
+    // index.json as the repository maintainer writes it, from the revisions in .app.
     private static void Index(string repository)
     {
         var apps = new Dictionary<string, IndexEntry>();
         foreach (var directory in Directory.GetDirectories(repository))
         {
-            var source = Path.Combine(directory, ".source");
-            if (File.Exists(source))
-                apps[Path.GetFileName(directory)] = new IndexEntry { Revision = JsonStorage.Parse<ToolSource>(File.ReadAllBytes(source)).Revision };
+            var manifest = Path.Combine(directory, ".app");
+            if (File.Exists(manifest))
+                apps[Path.GetFileName(directory)] = new IndexEntry { Revision = JsonStorage.Parse<ToolManifest>(File.ReadAllBytes(manifest)).Revision };
         }
 
         File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(new { apps = apps.ToDictionary(i => i.Key, i => new { revision = i.Value.Revision }) }));
@@ -77,9 +79,12 @@ public sealed class SourceManagerTests : IDisposable
         return Path.Combine(root, name, file);
     }
 
-    private FetchedApp Fetched(string name)
+    // The local .app when it was fetched from a source, null otherwise.
+    private ToolManifest Fetched(string name)
     {
-        return storage.Load<SourcesState>("sources.json").Apps.GetValueOrDefault(name);
+        var fileName = Local(name, ".app");
+        var manifest = File.Exists(fileName) ? new JsonStorage().Load<ToolManifest>(fileName) : null;
+        return manifest?.Origin != null ? manifest : null;
     }
 
     // A new instance, like the next devtools command, that reads the synced indexes again.
@@ -101,20 +106,20 @@ public sealed class SourceManagerTests : IDisposable
     }
 
     [Theory]
-    [InlineData("""{ "name": "other", "versioned": true }""", """{ "revision": 1 }""", "is named other")]
-    [InlineData("""{ "name": "age" }""", """{ "revision": 1 }""", "versioned")]
-    [InlineData("""{ "name": "age", "versioned": true }""", """{ }""", "revision of 1 or more")]
-    public void Refresh_RejectsInvalidManifests(string app, string source, string message)
+    [InlineData("""{ "name": "other", "revision": 1, "versioned": true, "install": { } }""", "is named other")]
+    [InlineData("""{ "name": "age", "revision": 1, "install": { } }""", "versioned")]
+    [InlineData("""{ "name": "age", "versioned": true, "install": { } }""", "revision of 1 or more")]
+    [InlineData("""{ "name": "age", "revision": 1, "versioned": true }""", "no install section")]
+    public void Refresh_RejectsInvalidManifests(string app, string message)
     {
         var directory = Directory.CreateDirectory(Path.Combine(repo, "age")).FullName;
         File.WriteAllText(Path.Combine(directory, ".app"), app);
-        File.WriteAllText(Path.Combine(directory, ".source"), source);
         File.WriteAllText(Path.Combine(repo, RepositoryIndex.FileName), """{ "apps": { "age": { "revision": 1 } } }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
 
         Assert.Contains(message, error.Message);
-        Assert.False(File.Exists(Local("age", ".source")));
+        Assert.False(File.Exists(Local("age", ".app")));
     }
 
     [Fact]
@@ -128,9 +133,9 @@ public sealed class SourceManagerTests : IDisposable
 
         Refresh("age");
 
-        Assert.Equal(File.ReadAllText(Path.Combine(repo, "age", ".source")), File.ReadAllText(Local("age", ".source")));
-        Assert.True(File.Exists(Local("age", ".app")));
-        Assert.Equal(repo, Fetched("age").Repository);
+        Assert.Equal(repo, Fetched("age").Origin.Repository);
+        Assert.NotNull(Fetched("age").Install);
+        Assert.False(ManifestHash.IsModified(Local("age", ".app")));
         Assert.Equal(2, Fetched("age").Revision);
     }
 
@@ -148,7 +153,7 @@ public sealed class SourceManagerTests : IDisposable
 
         Refresh("age");
 
-        Assert.Equal(expected == "repo" ? repo : other, Fetched("age").Repository);
+        Assert.Equal(expected == "repo" ? repo : other, Fetched("age").Origin.Repository);
     }
 
     [Fact]
@@ -163,7 +168,7 @@ public sealed class SourceManagerTests : IDisposable
 
         Refresh("age");
 
-        Assert.Equal(repo, Fetched("age").Repository);
+        Assert.Equal(repo, Fetched("age").Origin.Repository);
         Assert.Equal(1, Fetched("age").Revision);
     }
 
@@ -174,7 +179,7 @@ public sealed class SourceManagerTests : IDisposable
 
         var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
 
-        Assert.Contains("No `.source` file found for age", error.Message);
+        Assert.Contains("age has no install section", error.Message);
         Assert.Contains("source sync", error.Message);
     }
 
@@ -211,41 +216,78 @@ public sealed class SourceManagerTests : IDisposable
     }
 
     [Fact]
-    public void Refresh_KeepsFilesChangedByHandUntilTheyAreDeleted()
+    public void Refresh_KeepsAManifestChangedByHandUntilItIsReset()
     {
         Manifest(repo, "age", 1);
         Index(repo);
         Refresh("age");
-        File.WriteAllText(Local("age", ".source"), "{ \"mine\": true }");
+        File.WriteAllText(Local("age", ".app"), File.ReadAllText(Local("age", ".app")).Replace("%APPDIR%", "%APPDIR%/mine"));
         Manifest(repo, "age", 2, """, "envs": { "AGE": "1" }""");
         Index(repo);
         Sync();
 
         var output = Refresh("age");
 
-        Assert.Contains("has local changes, delete it", output);
-        Assert.Contains("mine", File.ReadAllText(Local("age", ".source")));
-        Assert.Contains("AGE", File.ReadAllText(Local("age", ".app")));
+        Assert.Contains("has local changes. `app reset age`", output);
+        Assert.Contains("mine", File.ReadAllText(Local("age", ".app")));
         Assert.Equal(1, Fetched("age").Revision);
 
-        File.Delete(Local("age", ".source"));
+        TestTools.CaptureConsole(() => Next().Reset("age"));
+
+        Assert.DoesNotContain("mine", File.ReadAllText(Local("age", ".app")));
+        Assert.Contains("AGE", File.ReadAllText(Local("age", ".app")));
+        Assert.Equal(2, Fetched("age").Revision);
+    }
+
+    [Fact]
+    public void ChangedFormattingIsNotALocalChange()
+    {
+        Manifest(repo, "age", 1);
+        Index(repo);
         Refresh("age");
 
-        Assert.DoesNotContain("mine", File.ReadAllText(Local("age", ".source")));
-        Assert.Equal(2, Fetched("age").Revision);
+        var fileName = Local("age", ".app");
+        File.WriteAllText(fileName, System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(fileName))!.ToJsonString());
+
+        Assert.False(ManifestHash.IsModified(fileName));
+    }
+
+    [Fact]
+    public void Reset_GetsAManifestThatIsMissing()
+    {
+        Manifest(repo, "age", 1);
+        Index(repo);
+
+        TestTools.CaptureConsole(() => Next().Reset("age"));
+
+        Assert.Equal(repo, Fetched("age").Origin.Repository);
+    }
+
+    [Fact]
+    public void Refresh_LeavesAHandMadeManifestWithoutInstallAndExplains()
+    {
+        Directory.CreateDirectory(Path.Combine(root, "age"));
+        File.WriteAllText(Local("age", ".app"), """{ "name": "age", "versioned": true }""");
+        Manifest(repo, "age", 1);
+        Index(repo);
+
+        var error = Assert.Throws<InvalidOperationException>(() => Next().Refresh("age"));
+
+        Assert.Contains("`app reset age`", error.Message);
+        Assert.Null(Fetched("age"));
     }
 
     // Local manifests not fetched from a source count as their own revision, 1 when they have none.
     [Theory]
-    [InlineData("", 1, false)]
-    [InlineData("", 2, true)]
-    [InlineData(""", "revision": 3""", 2, false)]
-    [InlineData(""", "revision": 3""", 4, true)]
-    public void Refresh_ReplacesLocalManifestsWithANewerRevision(string localRevision, int sourceRevision, bool replaced)
+    [InlineData(0, 1, false)]
+    [InlineData(0, 2, true)]
+    [InlineData(3, 2, false)]
+    [InlineData(3, 4, true)]
+    public void Refresh_ReplacesLocalManifestsWithANewerRevision(int localRevision, int sourceRevision, bool replaced)
     {
         Directory.CreateDirectory(Path.Combine(root, "age"));
-        File.WriteAllText(Local("age", ".app"), """{ "name": "age", "versioned": true }""");
-        File.WriteAllText(Local("age", ".source"), $$"""{ "mine": true{{localRevision}} }""");
+        var revision = localRevision > 0 ? $"\"revision\": {localRevision}," : "";
+        File.WriteAllText(Local("age", ".app"), $$"""{ "name": "age", {{revision}} "versioned": true, "mine": true, "install": { } }""");
         Manifest(repo, "age", sourceRevision);
         Index(repo);
 
@@ -253,7 +295,7 @@ public sealed class SourceManagerTests : IDisposable
         TestTools.CaptureConsole(() => changed = Next().Refresh("age"));
 
         Assert.Equal(replaced, changed);
-        Assert.Equal(!replaced, File.ReadAllText(Local("age", ".source")).Contains("mine"));
+        Assert.Equal(!replaced, File.ReadAllText(Local("age", ".app")).Contains("mine"));
         Assert.Equal(replaced ? sourceRevision : null, Fetched("age")?.Revision);
     }
 
@@ -269,7 +311,7 @@ public sealed class SourceManagerTests : IDisposable
         Refresh("age");
 
         Assert.Contains("kept the previous list", error);
-        Assert.True(File.Exists(Local("age", ".source")));
+        Assert.NotNull(Fetched("age"));
     }
 
     [Fact]
@@ -357,6 +399,6 @@ public sealed class SourceManagerTests : IDisposable
         var error = TestTools.CaptureError(() => Refresh("age"));
 
         Assert.Contains("using the list from", error);
-        Assert.True(File.Exists(Local("age", ".source")));
+        Assert.NotNull(Fetched("age"));
     }
 }

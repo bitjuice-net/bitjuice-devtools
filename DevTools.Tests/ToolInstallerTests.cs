@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using DevTools.Catalog;
 using DevTools.Infrastructure;
@@ -77,7 +78,16 @@ public sealed class ToolInstallerTests : IDisposable
 
     private void Source(string steps)
     {
-        File.WriteAllText(Path.Combine(appDir, ".source"), $$"""{ "versions": { "type": "github-releases", "repo": "a/b" }, "steps": {{steps}} }""");
+        SetInstall($$"""{ "versions": { "type": "github-releases", "repo": "a/b" }, "steps": {{steps}} }""");
+    }
+
+    // Puts the install section into .app of the application.
+    private void SetInstall(string install)
+    {
+        var fileName = Path.Combine(appDir, ".app");
+        var manifest = JsonNode.Parse(File.ReadAllText(fileName))!.AsObject();
+        manifest["install"] = JsonNode.Parse(install);
+        File.WriteAllText(fileName, manifest.ToJsonString());
     }
 
     private void Remote(string version, params (string Asset, string Url, byte[] Content)[] assets)
@@ -236,14 +246,14 @@ public sealed class ToolInstallerTests : IDisposable
     {
         var error = Assert.Throws<InvalidOperationException>(() => Install());
 
-        Assert.Contains(".source", error.Message);
+        Assert.Contains("install section", error.Message);
     }
 
     [Fact]
     public void Install_UnversionedApplicationThrows()
     {
-        Source("""[ { "type": "download", "asset": "a" } ]""");
         File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app" }""");
+        Source("""[ { "type": "download", "asset": "a" } ]""");
 
         var error = Assert.Throws<InvalidOperationException>(() => Install());
 
@@ -470,7 +480,7 @@ public sealed class ToolInstallerTests : IDisposable
         Assert.False(Directory.Exists(Installed("1.0.0")));
         Assert.True(Directory.Exists(Installed("2.0.0")));
         Assert.True(File.Exists(Path.Combine(appDir, ".app")));
-        Assert.True(File.Exists(Path.Combine(appDir, ".source")));
+        Assert.Contains("install", File.ReadAllText(Path.Combine(appDir, ".app")));
         Assert.Equal(new[] { "2.0.0" }, definitions.GetVersions("app").Select(i => i.Manifest.Version));
         Assert.Empty(Directory.GetDirectories(appDir, ".remove-*"));
     }
@@ -799,7 +809,7 @@ public sealed class ToolInstallerTests : IDisposable
     public void Install_ExpandsOsAndArchWithProjectNames()
     {
         platform = new Platform("linux", "x64");
-        File.WriteAllText(Path.Combine(appDir, ".source"), """
+        SetInstall("""
             {
               "versions": { "type": "github-releases", "repo": "a/b" },
               "archNames": { "x64": "amd64" },
@@ -850,7 +860,7 @@ public sealed class ToolInstallerTests : IDisposable
 
         var error = Assert.Throws<InvalidOperationException>(() => Install());
 
-        Assert.Contains("no steps for linux x64", error.Message);
+        Assert.Contains("no install steps for linux x64", error.Message);
         Assert.Empty(downloader.Urls);
         Assert.False(Directory.Exists(Installed("1.0.0")));
     }
@@ -859,7 +869,7 @@ public sealed class ToolInstallerTests : IDisposable
     public void Update_ExpandsOsAndArchInVersionSource()
     {
         platform = new Platform("linux", "arm64");
-        File.WriteAllText(Path.Combine(appDir, ".source"), """
+        SetInstall("""
             {
               "versions": { "type": "web-page", "url": "https://example.test/{os}/", "pattern": "app-(?<version>\\d+)-{os}-{arch}\\.tar\\.gz" },
               "osNames": { "linux": "Linux" },
@@ -879,8 +889,10 @@ public sealed class ToolInstallerTests : IDisposable
         var repo = Directory.CreateDirectory(Path.Combine(root, "..", Path.GetFileName(root) + "-repo", "tool")).Parent!.FullName;
         try
         {
-            File.WriteAllText(Path.Combine(repo, "tool", ".app"), """{ "name": "tool", "versioned": true, "paths": ["%APPDIR%"] }""");
-            File.WriteAllText(Path.Combine(repo, "tool", ".source"), """{ "revision": 1, "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "tool.zip" }, { "type": "extract" } ] }""");
+            File.WriteAllText(Path.Combine(repo, "tool", ".app"), """
+                { "name": "tool", "revision": 1, "versioned": true, "paths": ["%APPDIR%"],
+                  "install": { "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "tool.zip" }, { "type": "extract" } ] } }
+                """);
             File.WriteAllText(Path.Combine(repo, "index.json"), """{ "apps": { "tool": { "revision": 1 } } }""");
             storage.Save("sources.json", new SourcesState { Repositories = new List<string> { repo } });
             var options = Options.Create(new Settings { RootPath = root });
@@ -891,7 +903,7 @@ public sealed class ToolInstallerTests : IDisposable
             TestTools.CaptureConsole(() => withSources.Install("tool", "latest"));
 
             Assert.Equal("fetched", File.ReadAllText(Path.Combine(root, "tool", "1.0.0", "tool.txt")));
-            Assert.True(File.Exists(Path.Combine(root, "tool", ".source")));
+            Assert.Contains("origin", File.ReadAllText(Path.Combine(root, "tool", ".app")));
         }
         finally
         {
@@ -908,8 +920,7 @@ public sealed class ToolInstallerTests : IDisposable
         Remote("2.0.0", Zip(("app.txt", "y")));
         var broken = Path.Combine(root, "broken");
         Directory.CreateDirectory(Path.Combine(broken, "0.1.0"));
-        File.WriteAllText(Path.Combine(broken, ".app"), """{ "name": "broken", "versioned": true, "paths": ["%APPDIR%"] }""");
-        File.WriteAllText(Path.Combine(broken, ".source"), "{ }");
+        File.WriteAllText(Path.Combine(broken, ".app"), """{ "name": "broken", "versioned": true, "paths": ["%APPDIR%"], "install": { } }""");
         var plain = Path.Combine(root, "plain");
         Directory.CreateDirectory(plain);
         File.WriteAllText(Path.Combine(plain, ".app"), """{ "name": "plain", "paths": ["%APPDIR%"] }""");

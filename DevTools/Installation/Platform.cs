@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace DevTools.Installation;
 
-// The names .source files use for {os} and {arch} and in the os and arch of a step.
+// The names install sections of .app use for {os} and {arch} and in the os and arch of a step.
 public record Platform(string Os, string Arch)
 {
     public static Platform Current { get; } = new(CurrentOs(), RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant());

@@ -1,29 +1,31 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Security.Cryptography;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DevTools.Catalog;
 using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
-using DevTools.Installation.Models;
 using DevTools.Sources.Models;
 using Microsoft.Extensions.Options;
 
 namespace DevTools.Sources;
 
-// Manifest repositories: a directory per application with .app and .source, and index.json with their revisions.
+// Manifest repositories: a directory per application with its .app, and index.json with their revisions.
 // The indexes are kept in data/indexes.json, `source sync` gets them again.
+// A fetched .app records its repository in origin, so the tools directory alone knows where it came from.
 public partial class SourceManager(IOptions<Settings> options, IStorage storage, IToolDefinitionProvider definitions, IRepositoryClient client, TimeProvider time = null)
     : ISourceManager
 {
-    private const string ManifestFileName = ".app";
-    private static readonly string[] ManifestFiles = { ManifestFileName, ToolSource.FileName };
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
     private static readonly string FileName = PathUtils.GetDataPath("sources.json");
     private static readonly string IndexesFileName = PathUtils.GetDataPath("indexes.json");
+
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private readonly Settings settings = options.Value;
 
@@ -102,20 +104,16 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         var source = State.Repositories.FirstOrDefault(i => Comparer.Equals(i, repository))
             ?? throw new InvalidOperationException($"{repository} is not a source, see `source list`");
 
-        var table = new TextTable("APPLICATION", "REVISION", "FETCHED");
+        var table = new TextTable("APPLICATION", "REVISION", "LOCAL");
+        var root = PathUtils.GetRootedPath(settings.RootPath);
 
         foreach (var (name, entry) in GetIndex(source).Apps)
         {
-            var fetched = State.Apps.GetValueOrDefault(name);
-            table.AddRow(name, entry.Revision.ToString(), fetched != null && Comparer.Equals(fetched.Repository, source) ? fetched.Revision.ToString() : "");
+            var local = definitions.GetManifest(root, name);
+            table.AddRow(name, entry.Revision.ToString(), local != null && Comparer.Equals(local.Origin?.Repository, source) ? local.Revision.ToString() : "");
         }
 
         table.Write();
-    }
-
-    public FetchedApp GetOrigin(string application)
-    {
-        return State.Apps.GetValueOrDefault(application);
     }
 
     public void Sync()
@@ -147,52 +145,75 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     {
         var root = PathUtils.GetRootedPath(settings.RootPath);
         var directory = definitions.FindDirectory(root, application);
-        var hasSource = directory != null && File.Exists(Path.Combine(directory, ToolSource.FileName));
-        var fetched = State.Apps.GetValueOrDefault(application);
+        var fileName = directory != null ? Path.Combine(directory, ToolManifest.FileName) : null;
+        var local = fileName != null ? storage.Load<ToolManifest>(fileName) : null;
 
-        var located = Locate(application);
+        var located = Locate(application, local?.Origin?.Repository);
         if (located == null)
         {
-            if (hasSource)
+            if (local?.Install != null)
                 return false;
 
-            throw new InvalidOperationException($"No `{ToolSource.FileName}` file found for {application}, locally or in sources: {State.Repositories.Join(", ")}. " +
+            throw new InvalidOperationException($"{application} has no install section, locally or in sources: {State.Repositories.Join(", ")}. " +
                 "`source sync` gets their newest lists");
         }
 
         var (repository, entry) = located.Value;
 
-        // Manifests not fetched from a source are at their own revision, 1 when they have none,
-        // and a newer revision in a source replaces them. From then on the source manages the application.
-        if (hasSource && fetched == null)
+        if (local == null)
+            return Write(application, repository, entry.Revision, Path.Combine(root, application));
+
+        // A manifest not fetched from a source is at its own revision, 1 when it has none.
+        if (entry.Revision <= Math.Max(1, local.Revision))
         {
-            var local = Math.Max(1, storage.Load<ToolSource>(Path.Combine(directory, ToolSource.FileName)).Revision);
-            return entry.Revision > local && Write(application, repository, entry.Revision, directory, replaceLocal: true);
+            if (local.Install == null)
+                throw new InvalidOperationException($"`{fileName}` has no install section, `app reset {application}` replaces it with the one from {repository}");
+
+            return false;
         }
 
-        if (hasSource && Comparer.Equals(fetched.Repository, repository) && entry.Revision <= fetched.Revision)
+        // A hand-made manifest is replaced by a newer one from a source, a fetched one changed by hand stays.
+        if (local.Origin != null && ManifestHash.IsModified(fileName))
+        {
+            Console.WriteLine($"Kept `{fileName}`, it has local changes. `app reset {application}` replaces it with revision {entry.Revision} from {repository}");
             return false;
+        }
 
-        return Write(application, repository, entry.Revision, directory ?? Path.Combine(root, application));
+        return Write(application, repository, entry.Revision, directory);
     }
 
-    private static void Validate(ToolManifest manifest, ToolSource source, string name, string location)
+    public void Reset(string application)
+    {
+        var root = PathUtils.GetRootedPath(settings.RootPath);
+        var directory = definitions.FindDirectory(root, application);
+        var origin = directory != null ? storage.Load<ToolManifest>(Path.Combine(directory, ToolManifest.FileName)).Origin?.Repository : null;
+
+        var (repository, entry) = Locate(application, origin)
+            ?? throw new InvalidOperationException($"No source has {application}: {State.Repositories.Join(", ")}. `source sync` gets their newest lists");
+
+        if (!Write(application, repository, entry.Revision, directory ?? Path.Combine(root, application)))
+            Console.WriteLine($"{application}: the manifest is already the one from {repository}");
+    }
+
+    private static void Validate(ToolManifest manifest, string name, string location)
     {
         if (manifest.Name != name)
-            throw new InvalidOperationException($"{ManifestFileName} in `{location}` is named {manifest.Name}, expected {name}");
+            throw new InvalidOperationException($"{ToolManifest.FileName} in `{location}` is named {manifest.Name}, expected {name}");
 
         if (!manifest.Versioned)
-            throw new InvalidOperationException($"{ManifestFileName} in `{location}` needs \"versioned\": true to install versions");
+            throw new InvalidOperationException($"{ToolManifest.FileName} in `{location}` needs \"versioned\": true to install versions");
 
-        if (source.Revision < 1)
-            throw new InvalidOperationException($"{ToolSource.FileName} in `{location}` needs a revision of 1 or more");
+        if (manifest.Revision < 1)
+            throw new InvalidOperationException($"{ToolManifest.FileName} in `{location}` needs a revision of 1 or more");
+
+        if (manifest.Install == null)
+            throw new InvalidOperationException($"{ToolManifest.FileName} in `{location}` has no install section");
     }
 
     // The repository the application was fetched from keeps it. Otherwise the source with the newest revision wins,
     // the first one of them when they are equal.
-    private (string Repository, IndexEntry Entry)? Locate(string application)
+    private (string Repository, IndexEntry Entry)? Locate(string application, string fetched)
     {
-        var fetched = State.Apps.GetValueOrDefault(application)?.Repository;
         (string Repository, IndexEntry Entry)? newest = null;
 
         foreach (var repository in State.Repositories)
@@ -217,54 +238,41 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         return newest;
     }
 
-    // Replaces a local file only when it is still the one fetched before, so changes made by hand stay,
-    // unless the local files were not fetched from a source at all.
-    private bool Write(string application, string repository, int revision, string directory, bool replaceLocal = false)
+    // Writes .app as the repository has it, with origin added, through a temporary file so it is never half written.
+    // Returns false when the file already has that content.
+    private bool Write(string application, string repository, int revision, string directory)
     {
-        var files = ManifestFiles.ToDictionary(i => i, i => Download(repository, $"{application}/{i}")
-            ?? throw new InvalidOperationException($"{repository} lists {application} but has no `{application}/{i}`, `source sync` gets its newest list"));
+        var content = Download(repository, $"{application}/{ToolManifest.FileName}")
+            ?? throw new InvalidOperationException($"{repository} lists {application} but has no `{application}/{ToolManifest.FileName}`, `source sync` gets its newest list");
 
-        Validate(JsonStorage.Parse<ToolManifest>(files[ManifestFileName]), JsonStorage.Parse<ToolSource>(files[ToolSource.FileName]), application, $"{repository}/{application}");
-        Directory.CreateDirectory(directory);
+        var location = $"{repository}/{application}";
+        var manifest = JsonStorage.Parse<ToolManifest>(content);
+        Validate(manifest, application, location);
 
-        var fetched = State.Apps.GetValueOrDefault(application);
-        var hashes = new Dictionary<string, string>();
-        var kept = new List<string>();
-        var changed = false;
+        if (manifest.Revision != revision)
+            Console.Error.WriteLine($"{location}: {RepositoryIndex.FileName} lists revision {revision}, {ToolManifest.FileName} has {manifest.Revision}");
 
-        foreach (var (file, content) in files)
+        var json = JsonNode.Parse(content) as JsonObject
+            ?? throw new InvalidOperationException($"{ToolManifest.FileName} in `{location}` is not a JSON object");
+        json.Remove(ManifestHash.OriginProperty);
+        json[ManifestHash.OriginProperty] = new JsonObject
         {
-            var path = Path.Combine(directory, file);
-            var hash = Hash(content);
-            var local = File.Exists(path) ? Hash(File.ReadAllBytes(path)) : null;
+            ["repository"] = repository,
+            ["sha256"] = ManifestHash.Compute(json)
+        };
 
-            if (!replaceLocal && local != null && local != hash && local != fetched?.Hashes.GetValueOrDefault(file))
-            {
-                kept.Add(path);
-                if (fetched?.Hashes.GetValueOrDefault(file) is { } previous)
-                    hashes[file] = previous;
-                continue;
-            }
+        var path = Path.Combine(directory, ToolManifest.FileName);
+        var text = json.ToJsonString(Indented);
+        if (File.Exists(path) && File.ReadAllText(path) == text)
+            return false;
 
-            if (local != hash)
-            {
-                File.WriteAllBytes(path, content);
-                changed = true;
-            }
-            hashes[file] = hash;
-        }
+        Directory.CreateDirectory(directory);
+        var temporary = path + ".tmp";
+        File.WriteAllText(temporary, text);
+        File.Move(temporary, path, overwrite: true);
 
-        // With a file kept the application is not at the new revision, so the next install or update tries again.
-        State.Apps[application] = new FetchedApp { Repository = repository, Revision = kept.Count == 0 ? revision : fetched?.Revision ?? 0, Hashes = hashes };
-        Save();
-
-        foreach (var path in kept)
-            Console.WriteLine($"Kept `{path}`, it has local changes, delete it to get revision {revision} from {repository}");
-
-        if (kept.Count == 0)
-            Console.WriteLine($"{application}: manifests at revision {revision} from {repository}");
-
-        return changed;
+        Console.WriteLine($"{application}: manifest at revision {manifest.Revision} from {repository}");
+        return true;
     }
 
     private byte[] Download(string repository, string path)
@@ -316,14 +324,13 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     {
         var content = Download(repository, RepositoryIndex.FileName)
             ?? throw new InvalidOperationException($"{repository} has no {RepositoryIndex.FileName}, is it a manifest repository?");
-        var index = JsonStorage.Parse<RepositoryIndex>(content);
 
-        return index;
+        return JsonStorage.Parse<RepositoryIndex>(content);
     }
 
     private static bool IsUnavailable(Exception e)
     {
-        return e is InvalidOperationException or HttpRequestException or IOException or System.Text.Json.JsonException;
+        return e is InvalidOperationException or HttpRequestException or IOException or JsonException;
     }
 
     private static string Normalize(string repository)
@@ -335,11 +342,6 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             throw new InvalidOperationException($"`{repository}` is neither owner/repo on GitHub nor a full directory path");
 
         return repository;
-    }
-
-    private static string Hash(byte[] content)
-    {
-        return Convert.ToHexString(SHA256.HashData(content));
     }
 
     private void Save()
