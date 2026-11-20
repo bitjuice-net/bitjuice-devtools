@@ -10,14 +10,11 @@ public class ToolManifest
 
     public string Name { get; set; }
 
-    // Bumped in a manifest repository whenever the manifest changes.
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public int Revision { get; set; }
-
     public string Version { get; set; }
 
+    // The application lies right in its directory. Without it every subdirectory named like a version is a version.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public bool Versioned { get; set; }
+    public bool Flat { get; set; }
 
     public List<string> Paths { get; set; }
     public Dictionary<string, string> Envs { get; set; }

@@ -68,7 +68,7 @@ public sealed class ToolInstallerTests : IDisposable
         manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, new Lazy<IToolInstaller>(() => new ToolInstaller(storage, versions, downloader, platform)));
         appDir = Path.Combine(root, "app");
         Directory.CreateDirectory(appDir);
-        File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app", "versioned": true, "paths": ["%APPDIR%"] }""");
+        File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app", "paths": ["%APPDIR%"] }""");
     }
 
     public void Dispose()
@@ -250,14 +250,14 @@ public sealed class ToolInstallerTests : IDisposable
     }
 
     [Fact]
-    public void Install_UnversionedApplicationThrows()
+    public void Install_FlatApplicationThrows()
     {
-        File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app" }""");
+        File.WriteAllText(Path.Combine(appDir, ".app"), """{ "name": "app", "flat": true }""");
         Source("""[ { "type": "download", "asset": "a" } ]""");
 
         var error = Assert.Throws<InvalidOperationException>(() => Install());
 
-        Assert.Contains("versioned", error.Message);
+        Assert.Contains("is flat", error.Message);
     }
 
     [Fact]
@@ -541,15 +541,15 @@ public sealed class ToolInstallerTests : IDisposable
     }
 
     [Fact]
-    public void Remove_NotVersionedApplicationIsRefused()
+    public void Remove_FlatApplicationIsRefused()
     {
         var directory = Path.Combine(root, "single");
         Directory.CreateDirectory(directory);
-        File.WriteAllText(Path.Combine(directory, ".app"), """{ "name": "single" }""");
+        File.WriteAllText(Path.Combine(directory, ".app"), """{ "name": "single", "flat": true }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => manager.Remove("single", "default"));
 
-        Assert.Contains("not versioned", error.Message);
+        Assert.Contains("is flat", error.Message);
         Assert.True(File.Exists(Path.Combine(directory, ".app")));
     }
 
@@ -890,10 +890,10 @@ public sealed class ToolInstallerTests : IDisposable
         try
         {
             File.WriteAllText(Path.Combine(repo, "apps", "tool.app"), """
-                { "name": "tool", "revision": 1, "versioned": true, "paths": ["%APPDIR%"],
+                { "name": "tool", "paths": ["%APPDIR%"],
                   "install": { "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "tool.zip" }, { "type": "extract" } ] } }
                 """);
-            File.WriteAllText(Path.Combine(repo, "index.json"), """{ "apps": { "tool": { "revision": 1 } } }""");
+            File.WriteAllText(Path.Combine(repo, "index.json"), """{ "apps": ["tool"] }""");
             storage.Save("config/sources.json", new SourcesState { Repositories = new List<string> { repo } });
             var options = Options.Create(new Settings { RootPath = root });
             var sources = new SourceManager(options, storage, definitions, new RepositoryClient(new System.Net.Http.HttpClient()));
@@ -920,10 +920,10 @@ public sealed class ToolInstallerTests : IDisposable
         Remote("2.0.0", Zip(("app.txt", "y")));
         var broken = Path.Combine(root, "broken");
         Directory.CreateDirectory(Path.Combine(broken, "0.1.0"));
-        File.WriteAllText(Path.Combine(broken, ".app"), """{ "name": "broken", "versioned": true, "paths": ["%APPDIR%"], "install": { } }""");
+        File.WriteAllText(Path.Combine(broken, ".app"), """{ "name": "broken", "paths": ["%APPDIR%"], "install": { } }""");
         var plain = Path.Combine(root, "plain");
         Directory.CreateDirectory(plain);
-        File.WriteAllText(Path.Combine(plain, ".app"), """{ "name": "plain", "paths": ["%APPDIR%"] }""");
+        File.WriteAllText(Path.Combine(plain, ".app"), """{ "name": "plain", "flat": true, "paths": ["%APPDIR%"] }""");
 
         var output = new StringWriter();
         var original = Console.Out;

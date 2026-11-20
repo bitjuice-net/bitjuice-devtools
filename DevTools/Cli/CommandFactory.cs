@@ -79,11 +79,6 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         list.SetAction(result => sources.Value.List(result.GetValue(listArgument)));
         cmd.Subcommands.Add(list);
 
-        var sync = new Command("sync", "Get the newest lists of applications from all sources.");
-        sync.SetAction(_ => sources.Value.Sync());
-        cmd.Subcommands.Add(sync);
-
-
         return cmd;
     }
 
@@ -150,8 +145,9 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
             DefaultValueFactory = _ => MetaVersion.Latest
         };
         var refreshOption = RefreshOption();
-        var cmd = new Command("install", "Download and install a version of an application.") { applicationArgument, versionArgument, refreshOption };
-        cmd.SetAction(result => manager.Install(result.GetValue(applicationArgument), result.GetValue(versionArgument), result.GetValue(refreshOption)));
+        var sourceOption = SourceOption();
+        var cmd = new Command("install", "Download and install a version of an application.") { applicationArgument, versionArgument, refreshOption, sourceOption };
+        cmd.SetAction(result => manager.Install(result.GetValue(applicationArgument), result.GetValue(versionArgument), result.GetValue(refreshOption), result.GetValue(sourceOption)));
         return cmd;
     }
 
@@ -180,6 +176,11 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         return new Option<bool>("--refresh") { Description = "Ask the version sources again, without it versions found in the last hour are used." };
     }
 
+    private static Option<string> SourceOption()
+    {
+        return new Option<string>("--source") { Description = "The repository to take .app from, needed when more than one source has the application." };
+    }
+
     private Command BuildRemoveCommand()
     {
         var applicationArgument = new Argument<string>("application");
@@ -193,8 +194,9 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
     private Command BuildResetCommand()
     {
         var applicationArgument = new Argument<string>("application");
-        var cmd = new Command("reset", "Replace .app of an application with the one from its source, dropping local changes.") { applicationArgument };
-        cmd.SetAction(result => sources.Value.Reset(result.GetValue(applicationArgument)));
+        var sourceOption = SourceOption();
+        var cmd = new Command("reset", "Replace .app of an application with the one from its source, dropping local changes.") { applicationArgument, sourceOption };
+        cmd.SetAction(result => sources.Value.Reset(result.GetValue(applicationArgument), result.GetValue(sourceOption)));
         return cmd;
     }
 

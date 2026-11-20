@@ -29,7 +29,7 @@ D:\Tools
 3. Open a new console. It has the `dt` command, which runs devtools and applies the changes to the console right away.
 
 The tools directory is the parent of the devtools directory. Another one can be set in `config/settings.json`,
-see `config/settings.example.json`.
+see `config/settings.json.example`.
 
 ## Everyday use
 
@@ -47,14 +47,15 @@ dt app disable java     take an application off PATH without deleting it, `dt ap
 dt sc                   scan the tools directory now
 ```
 
-Versions added or deleted by hand and edited `.app` files are found on their own, a scan is rarely needed.
+After adding or deleting versions by hand, or editing `.app`, run `dt sc`. A command that misses an application or
+a version, such as `dt sl java 26.0.1` right after copying it in, scans once on its own.
 `install` and `update` use the versions found in the last hour, `--refresh` asks the version sources again.
 
 | Group | Commands |
 |---|---|
 | `app` | `list` (`ls`), `select` (`s`), `enable` (`e`), `disable` (`d`), `install`, `update`, `remove` (`rm`), `reset` |
 | `cache` | `scan`, `prune` |
-| `source` | `add`, `remove` (`rm`), `list` (`ls`), `sync` |
+| `source` | `add`, `remove` (`rm`), `list` (`ls`) |
 | `shell` | `install`, `uninstall`, `hook`, `env` |
 
 `ls`, `sl` and `sc` are shortcuts for `app list`, `app select` and `cache scan`. `devtools <command> -h` describes every command.
@@ -66,8 +67,6 @@ Every application has a `.app` in its directory. The tools directory alone is en
 ```json
 {
   "name": "age",
-  "revision": 1,
-  "versioned": true,
   "paths": ["%APPDIR%"],
   "envs": { "AGE_HOME": "%APPDIR%" },
   "install": {
@@ -82,11 +81,11 @@ Every application has a `.app` in its directory. The tools directory alone is en
 }
 ```
 
-- `versioned`: every subdirectory is a version. Without it the directory itself is the application.
+- Every subdirectory named like a version (`1.2.0`, `21.0.2`) is a version of the application. `"flat": true` means
+  the application lies right in its directory, without versions.
 - `paths` go on `PATH`, `envs` are set as variables.
 - `%APPDIR%` is the directory of the selected version, `%HOME%` and `%USERPROFILE%` the home of the user on every system,
   other `%NAME%` come from the environment. Paths may use `\`, it becomes `/` outside of Windows.
-- `revision` is the version of the manifest, bumped in a manifest repository whenever it changes.
 - `install` is optional, without it versions are added by hand.
 - `origin` is added by devtools to a manifest fetched from a repository: the repository and the SHA-256 of the content.
 
@@ -115,25 +114,24 @@ enough for public repositories.
 
 ```
 dt source list                       repositories and how many applications they have
-dt source list owner/repo            the applications of a repository and their revisions
+dt source list owner/repo            the applications of a repository and which of them you have
 dt source add owner/repo             add a repository on GitHub, or a full local path while writing manifests
-dt source sync                       get the newest lists of applications of all repositories now
 ```
 
-A repository has `apps/<application>.app` for every application, and `index.json` in its root with the revision
-of every application:
+A repository has `apps/<application>.app` for every application, and `index.json` in its root with their names:
 
 ```json
-{ "apps": { "age": { "revision": 2 }, "java": { "revision": 1 } } }
+{ "apps": ["age", "java"] }
 ```
 
-A list older than a day is downloaded again when `dt app install` or `dt app update` needs it, an unavailable
-repository keeps the previous one. These commands bring the manifest of an application to the revision on the list:
+Nothing of a repository is cached. `dt app install` and `dt app update` read it every time and bring the manifest of
+the application up to date:
 
-- An application gets the manifest of the repository with the newest revision and stays with the repository in its `origin`.
-- A manifest without `origin` counts as its own `revision`, 1 without one, and is replaced only by a newer one.
+- An application stays with the repository in its `origin`. A new one comes from the only repository that has it.
+  When more than one has it, devtools does not choose: `--source owner/repo` tells which one.
+- A manifest without `origin`, made by hand, is never replaced on its own. `dt app reset <app>` replaces it.
 - A fetched manifest changed by hand is kept, `dt ls <app>` shows it as changed locally.
-  `dt app reset <app>` replaces it with the one from the repository.
+  `dt app reset <app>` replaces it with the one from the repository, `--source` with the one from another repository.
 
 ## Configuration and cache
 
@@ -145,9 +143,7 @@ Next to devtools, `config` keeps what you chose and `cache` what devtools can re
 | `config/apps.json` | selected and disabled versions |
 | `config/sources.json` | manifest repositories |
 | `cache/apps.json` | applications found in the tools directory |
-| `cache/scan.json` | times of the scanned directories and `.app` files, a change makes the next command scan again |
 | `cache/versions.json` | versions found by the version sources, kept for an hour |
-| `cache/sources.json` | the lists of the repositories, downloaded again after a day or by `dt source sync` |
 | `cache/state` | changes on every save, `dt` reloads the console only when it changed |
 
 Any file in `cache`, or the whole directory, may be deleted, the next command rebuilds it.

@@ -33,13 +33,6 @@ public sealed class ScanTests : IDisposable
     }
 
     // Times a minute old, so a scan right after creating the files can trust them.
-    private void Age()
-    {
-        var old = DateTime.UtcNow.AddMinutes(-1);
-        foreach (var entry in new DirectoryInfo(root).EnumerateFileSystemInfos("*", SearchOption.AllDirectories).Append(new DirectoryInfo(root)))
-            entry.LastWriteTimeUtc = old;
-    }
-
     private void Dirs(params string[] directories)
     {
         foreach (var directory in directories)
@@ -54,7 +47,7 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Versioned_CreatesVersionFromEachVersionDirectoryOnly()
     {
-        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%\\bin"] }""");
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%\\bin"] }""");
         Dirs("java/11.0.1", "java/25.0.5", "java/docs", "java/.install-1.0.0-abc");
 
         definitions.Scan(root);
@@ -66,8 +59,8 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Versioned_MergesDirectoriesWithTheSameName()
     {
-        Manifest("mingw", """{ "name": "mingw", "versioned": true, "paths": ["%APPDIR%\\bin"] }""");
-        Manifest("mingw-legacy", """{ "name": "mingw", "versioned": true, "paths": ["%APPDIR%\\bin", "%APPDIR%\\msys"] }""");
+        Manifest("mingw", """{ "name": "mingw", "paths": ["%APPDIR%\\bin"] }""");
+        Manifest("mingw-legacy", """{ "name": "mingw", "paths": ["%APPDIR%\\bin", "%APPDIR%\\msys"] }""");
         Dirs("mingw/15.2.0", "mingw-legacy/1.0.0");
 
         definitions.Scan(root);
@@ -80,8 +73,8 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Versioned_ThrowsOnSameVersionInTwoDirectoriesAndKeepsCache()
     {
-        Manifest("mingw", """{ "name": "mingw", "versioned": true }""");
-        Manifest("mingw-legacy", """{ "name": "mingw", "versioned": true }""");
+        Manifest("mingw", """{ "name": "mingw" }""");
+        Manifest("mingw-legacy", """{ "name": "mingw" }""");
         Dirs("mingw/1.0.0", "mingw-legacy/1.0.0");
 
         var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
@@ -94,7 +87,7 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Versioned_ThrowsOnTwoPartAndThreePartNamesOfOneVersion()
     {
-        Manifest("java", """{ "name": "java", "versioned": true }""");
+        Manifest("java", """{ "name": "java" }""");
         Dirs("java/1.2", "java/1.2.0");
 
         var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
@@ -105,7 +98,7 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Versioned_FindsVersionByEitherName()
     {
-        Manifest("java", """{ "name": "java", "versioned": true }""");
+        Manifest("java", """{ "name": "java" }""");
         Dirs("java/1.2.0", "java/103.0");
 
         definitions.Scan(root);
@@ -118,7 +111,7 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Versioned_IgnoresLegacyManifestInVersionDirectory()
     {
-        Manifest("java", """{ "name": "java", "versioned": true }""");
+        Manifest("java", """{ "name": "java" }""");
         Manifest("java/11.0.1", """{ "name": "java", "version": "%DIRNAME%" }""");
 
         definitions.Scan(root);
@@ -127,9 +120,9 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Unversioned_DoesNotTreatSubdirectoriesAsVersions()
+    public void Flat_DoesNotTreatSubdirectoriesAsVersions()
     {
-        Manifest("android-sdk", """{ "name": "android-sdk" }""");
+        Manifest("android-sdk", """{ "name": "android-sdk", "flat": true }""");
         Dirs("android-sdk/34.0.0", "android-sdk/platform-tools");
 
         definitions.Scan(root);
@@ -138,10 +131,10 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Unversioned_ThrowsOnTwoDirectoriesWithTheSameName()
+    public void Flat_ThrowsOnTwoDirectoriesWithTheSameName()
     {
-        Manifest("a", """{ "name": "x" }""");
-        Manifest("b", """{ "name": "x" }""");
+        Manifest("a", """{ "name": "x", "flat": true }""");
+        Manifest("b", """{ "name": "x", "flat": true }""");
 
         var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
 
@@ -152,10 +145,10 @@ public sealed class ScanTests : IDisposable
     [Theory]
     [InlineData("""{ "name": "x", "version": "default" }""")]
     [InlineData("""{ "name": "x", "version": "%DIRNAME%" }""")]
-    [InlineData("""{ "name": "x", "version": "1.0.0", "versioned": true }""")]
+    [InlineData("""{ "name": "x", "version": "1.0.0" }""")]
     public void VersionInManifest_ThrowsAndKeepsCache(string content)
     {
-        Manifest("good", """{ "name": "good" }""");
+        Manifest("good", """{ "name": "good", "flat": true }""");
         definitions.Scan(root);
         Manifest("x", content);
 
@@ -166,18 +159,18 @@ public sealed class ScanTests : IDisposable
         Assert.Equal(new[] { "good" }, definitions.GetNames());
     }
 
-    private ToolManager ScanUnversioned(out ToolSettingsProvider settings)
+    private ToolManager ScanFlat(out ToolSettingsProvider settings)
     {
-        Manifest("bin", """{ "name": "bin", "paths": ["%APPDIR%\\x"] }""");
+        Manifest("bin", """{ "name": "bin", "flat": true, "paths": ["%APPDIR%\\x"] }""");
         settings = new ToolSettingsProvider(storage, definitions);
         definitions.Scan(root);
         return new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, null);
     }
 
     [Fact]
-    public void Unversioned_IsOnThePathAfterScan()
+    public void Flat_IsOnThePathAfterScan()
     {
-        var manager = ScanUnversioned(out _);
+        var manager = ScanFlat(out _);
 
         Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
     }
@@ -185,8 +178,8 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Env_PutsApplicationPathsInOrder()
     {
-        Manifest("a", """{ "name": "a", "paths": ["%APPDIR%"] }""");
-        var manager = ScanUnversioned(out _);
+        Manifest("a", """{ "name": "a", "flat": true, "paths": ["%APPDIR%"] }""");
+        var manager = ScanFlat(out _);
 
         var setup = TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash));
 
@@ -196,8 +189,8 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Env_BashExportsPathAndEnvs()
     {
-        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%\\bin"], "envs": { "JAVA_HOME": "%APPDIR%" } }""");
-        var manager = ScanUnversioned(out _);
+        Manifest("java", """{ "name": "java", "flat": true, "paths": ["%APPDIR%\\bin"], "envs": { "JAVA_HOME": "%APPDIR%" } }""");
+        var manager = ScanFlat(out _);
 
         var setup = TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash));
 
@@ -209,9 +202,9 @@ public sealed class ScanTests : IDisposable
     [Theory]
     [InlineData(null)]
     [InlineData("default")]
-    public void Unversioned_KeepsWorkingWithStoredOrDefaultSelection(string selected)
+    public void Flat_KeepsWorkingWithStoredOrDefaultSelection(string selected)
     {
-        var manager = ScanUnversioned(out var settings);
+        var manager = ScanFlat(out var settings);
         if (selected != null)
             settings.UpdateSettings("bin", s => s.Version = selected);
 
@@ -224,20 +217,20 @@ public sealed class ScanTests : IDisposable
     [Theory]
     [InlineData(null)]
     [InlineData("latest")]
-    public void Unversioned_SelectExplainsAndChangesNothing(string version)
+    public void Flat_SelectExplainsAndChangesNothing(string version)
     {
-        var manager = ScanUnversioned(out var settings);
+        var manager = ScanFlat(out var settings);
         var before = settings.GetSettings("bin").Version;
 
         var output = TestTools.CaptureConsole(() => manager.Select("bin", version));
 
-        Assert.Contains("not versioned", output);
+        Assert.Contains("is flat", output);
         Assert.Equal(before, settings.GetSettings("bin").Version);
     }
 
     [Theory]
     [InlineData("""{ "version": "1.0.0" }""")]
-    [InlineData("""{ "versioned": true }""")]
+    [InlineData("""{ "flat": true }""")]
     public void InvalidManifest_ThrowsWithItsDirectory(string content)
     {
         Manifest("x", content);
@@ -250,7 +243,7 @@ public sealed class ScanTests : IDisposable
     [Fact]
     public void Prune_KeepsMetaVersionsAndRemovesStaleEntries()
     {
-        Manifest("java", """{ "name": "java", "versioned": true }""");
+        Manifest("java", """{ "name": "java" }""");
         Dirs("java/11.0.1");
         var settings = new ToolSettingsProvider(storage, definitions);
         var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, null);
@@ -264,59 +257,68 @@ public sealed class ScanTests : IDisposable
         Assert.Equal("latest", settings.GetSettings("java").Version);
     }
 
-    [Fact]
-    public void IsUpToDate_NoticesNewVersionsAndEditedManifests()
+    private ToolManager Manager(ToolSettingsProvider tools = null)
     {
-        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
-        Dirs("java/1.0.0", "devtools/cache");
-        Age();
-        definitions.Scan(root);
-        Assert.True(definitions.IsUpToDate(root));
-
-        File.WriteAllText(Path.Combine(root, "devtools", "cache", "state"), "1");
-        Assert.True(definitions.IsUpToDate(root));
-
-        Dirs("java/2.0.0");
-        Assert.False(definitions.IsUpToDate(root));
-
-        Age();
-        definitions.Scan(root);
-        File.SetLastWriteTimeUtc(Path.Combine(root, "java", ".app"), DateTime.UtcNow.AddMinutes(1));
-        Assert.False(definitions.IsUpToDate(root));
+        return new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, tools ?? new ToolSettingsProvider(storage, definitions), null);
     }
 
     [Fact]
-    public void List_FindsVersionsAddedByHand()
+    public void List_ShowsVersionsAddedByHandOnlyAfterAScan()
     {
-        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         Dirs("java/1.0.0");
-        var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, new ToolSettingsProvider(storage, definitions), null);
-        Age();
         definitions.Scan(root);
         Dirs("java/2.0.0");
 
-        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("java "));
+        var before = TestTools.CaptureConsole(() => Manager().List(false)).Split('\n').Single(i => i.StartsWith("java "));
+        Manager().Scan();
+        var after = TestTools.CaptureConsole(() => Manager().List(false)).Split('\n').Single(i => i.StartsWith("java "));
 
-        Assert.Contains("1.0.0, 2.0.0", row);
+        Assert.DoesNotContain("2.0.0", before);
+        Assert.Contains("1.0.0, 2.0.0", after);
     }
 
     [Fact]
-    public void IsUpToDate_IsFalseWithoutTheSnapshot()
+    public void Select_FindsAVersionAddedByHandWithOneScan()
     {
-        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
-        Age();
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
+        Dirs("java/1.0.0");
+        var tools = new ToolSettingsProvider(storage, definitions);
         definitions.Scan(root);
-        Assert.True(definitions.IsUpToDate(root));
+        Dirs("java/2.0.0");
 
-        storage.Save("cache/scan.json", new DevTools.Catalog.Models.ScanSnapshot());
+        TestTools.CaptureConsole(() => Manager(tools).Select("java", "2.0.0"));
 
-        Assert.False(definitions.IsUpToDate(root));
+        Assert.Equal("2.0.0", tools.GetSettings("java").Version);
+    }
+
+    [Fact]
+    public void Show_FindsAnApplicationAddedByHandWithOneScan()
+    {
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
+        definitions.Scan(root);
+        Manifest("go", """{ "name": "go", "paths": ["%APPDIR%"] }""");
+        Dirs("go/1.0.0");
+
+        Assert.Contains(Path.Combine(root, "go"), TestTools.CaptureConsole(() => Manager().Show("go")));
+        Assert.Contains("not found", Assert.Throws<InvalidOperationException>(() => Manager().Show("ghost")).Message);
+    }
+
+    [Fact]
+    public void Env_ScansWhenTheCacheIsMissing()
+    {
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
+        Dirs("java/1.0.0");
+
+        Assert.False(definitions.IsScanned());
+        Assert.Contains(Path.Combine(root, "java", "1.0.0"), TestTools.CaptureConsole(() => Manager().GetEnv(Shell.Bash)));
+        Assert.True(definitions.IsScanned());
     }
 
     [Fact]
     public void ApplicationWithoutVersions_IsListedAndShown()
     {
-        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         var tools = new ToolSettingsProvider(storage, definitions);
         var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, tools, null);
 
@@ -337,19 +339,16 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Env_KeepsThePreviousListWhenTheScanFails()
+    public void Env_DoesNotFailWhenTheScanFails()
     {
-        Manifest("java", """{ "name": "java", "versioned": true, "paths": ["%APPDIR%"] }""");
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         Dirs("java/1.0.0");
-        var manager = new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, new ToolSettingsProvider(storage, definitions), null);
-        Age();
-        definitions.Scan(root);
         Manifest("broken", "{ not json");
 
         var output = "";
-        var error = TestTools.CaptureError(() => output = TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
+        var error = TestTools.CaptureError(() => output = TestTools.CaptureConsole(() => Manager().GetEnv(Shell.Bash)));
 
         Assert.Contains("Could not scan", error);
-        Assert.Contains(Path.Combine(root, "java", "1.0.0"), output);
+        Assert.Contains("export DT_PATH=", output);
     }
 }

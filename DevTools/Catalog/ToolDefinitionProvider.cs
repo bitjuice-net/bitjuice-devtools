@@ -10,7 +10,6 @@ namespace DevTools.Catalog;
 public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 {
     private static readonly string FileName = PathUtils.GetCachePath("apps.json");
-    private static readonly string SnapshotFileName = PathUtils.GetCachePath("scan.json");
 
     private static readonly EnumerationOptions ScanOptions = new()
     {
@@ -58,7 +57,6 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         if(!directory.Exists)
             throw new ArgumentException($"Directory do not exists `{root}`", nameof(root));
 
-        var scanned = DateTime.UtcNow;
         var found = Scan(directory).ToList();
         var apps = found.SelectMany(CreateDefinitions).ToList();
 
@@ -74,58 +72,20 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
             storage.Save(FileName, scannedTools);
 
         tools = scannedTools;
-        storage.Save(SnapshotFileName, CreateSnapshot(directory, found.Select(i => i.Directory), scanned), changesState: false);
     }
 
     private static string Fingerprint(Dictionary<string, List<ToolDefinition>> applications)
     {
         return applications.OrderBy(i => i.Key, StringComparer.Ordinal)
-            .SelectMany(i => i.Value.Select(d => $"{i.Key}|{d.Path}|{d.Manifest.Version}|{d.Manifest.Versioned}|{d.Manifest.Paths?.Join(";")}|{d.Manifest.Envs?.Select(e => e.Key + "=" + e.Value).Join(";")}").Prepend(i.Key))
+            .SelectMany(i => i.Value.Select(d => $"{i.Key}|{d.Path}|{d.Manifest.Version}|{d.Manifest.Flat}|{d.Manifest.Paths?.Join(";")}|{d.Manifest.Envs?.Select(e => e.Key + "=" + e.Value).Join(";")}").Prepend(i.Key))
             .Order(StringComparer.Ordinal)
             .Join("\n");
     }
 
-    // True when a scan would find the same, so changes made by hand are found without `sc`.
-    public bool IsUpToDate(string root)
+    // Changes made by hand are found by `sc`, a deleted cache by the next command.
+    public bool IsScanned()
     {
-        if (!storage.Exists(FileName))
-            return false;
-
-        // Without the snapshot nothing tells what changed, so a deleted scan.json means a new scan.
-        var snapshot = storage.Load<ScanSnapshot>(SnapshotFileName);
-        if (snapshot.Root == null)
-            return false;
-
-        // File systems keep times in steps of up to 2 seconds, so a change made right around a scan may keep the time
-        // the scan saw. Such entries cannot be trusted and get one more scan, like git does with racily clean files.
-        var racy = snapshot.Scanned - TimeSpan.FromSeconds(2).Ticks;
-
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        return string.Equals(snapshot.Root, Path.GetFullPath(root), comparison)
-            && snapshot.Times.All(i => i.Value < racy && LastWrite(i.Key) == i.Value);
-    }
-
-    // A directory changes its time when an entry is added or removed: the tools directory and the ones on the way
-    // to an application for new applications, an application directory for new versions, and .app when it is edited.
-    // Other directories, such as data of devtools, change all the time and do not matter.
-    private static ScanSnapshot CreateSnapshot(DirectoryInfo root, IEnumerable<DirectoryInfo> applications, DateTime scanned)
-    {
-        var paths = new HashSet<string> { root.FullName };
-
-        foreach (var application in applications)
-        {
-            paths.Add(Path.Combine(application.FullName, ToolManifest.FileName));
-            for (var directory = application; directory != null && directory.FullName.Length > root.FullName.Length; directory = directory.Parent)
-                paths.Add(directory.FullName);
-        }
-
-        return new ScanSnapshot { Root = root.FullName, Scanned = scanned.Ticks, Times = paths.ToDictionary(i => i, LastWrite) };
-    }
-
-    private static long LastWrite(string path)
-    {
-        // One call for files and directories alike, a missing path gives a fixed time that never matches.
-        return File.GetLastWriteTimeUtc(path).Ticks;
+        return storage.Exists(FileName);
     }
 
     public string FindSourceDirectory(string root, string application)
@@ -141,8 +101,8 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
             throw new InvalidOperationException($"More than one `{ToolManifest.FileName}` with an install section found for {application}: {directories.Select(i => i.Directory.FullName).Join(", ")}");
 
         var (directory, manifest) = directories[0];
-        if (!manifest.Versioned)
-            throw new InvalidOperationException($"{application} in `{directory.FullName}` needs \"versioned\": true to install versions");
+        if (manifest.Flat)
+            throw new InvalidOperationException($"{application} in `{directory.FullName}` is flat, only applications with versions can be installed");
 
         return directory.FullName;
     }
@@ -190,9 +150,9 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
             throw new InvalidOperationException($"Manifest in `{directory.FullName}` has no name");
 
         if (manifest.Version != null)
-            throw new InvalidOperationException($"Manifest in `{directory.FullName}` has a version, remove it. Versions come from subdirectories of a manifest with \"versioned\": true");
+            throw new InvalidOperationException($"Manifest in `{directory.FullName}` has a version, remove it. Versions come from its subdirectories");
 
-        if (!manifest.Versioned)
+        if (manifest.Flat)
         {
             yield return CreateDefinition(directory, manifest, MetaVersion.Default);
             yield break;
@@ -214,7 +174,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
             {
                 Name = manifest.Name,
                 Version = version,
-                Versioned = manifest.Versioned,
+                Flat = manifest.Flat,
                 Paths = manifest.Paths,
                 Envs = manifest.Envs
             }

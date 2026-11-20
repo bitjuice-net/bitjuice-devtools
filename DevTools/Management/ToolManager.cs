@@ -46,22 +46,25 @@ public class ToolManager(
         Console.WriteLine(ShellScripts.Env(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable, JsonStorage.ReadState(PathUtils.StateFile)));
     }
 
+    // Set by a scan in this command, so a missing application or version is not scanned for twice.
+    private bool scanned;
+
     public void Scan()
     {
         toolDefinitionProvider.Scan(PathUtils.GetRootedPath(settings.RootPath));
+        scanned = true;
     }
 
-    // Changes made by hand, such as a new version directory or an edited .app, are found without `sc`.
-    // A failed scan must not break the console, so the previous list stays and the next command tries again.
+    // Changes made by hand need `sc`. Only a missing cache is scanned for, a failed scan must not break the console.
     private void EnsureScanned()
     {
         var root = PathUtils.GetRootedPath(settings.RootPath);
-        if (!Directory.Exists(root) || toolDefinitionProvider.IsUpToDate(root))
+        if (scanned || !Directory.Exists(root) || toolDefinitionProvider.IsScanned())
             return;
 
         try
         {
-            toolDefinitionProvider.Scan(root);
+            Scan();
         }
         catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
@@ -99,11 +102,11 @@ public class ToolManager(
         Console.WriteLine($"Pruned {pruned} stale setting(s)");
     }
 
-    public void Install(string application, string version, bool refresh = false)
+    public void Install(string application, string version, bool refresh = false, string source = null)
     {
         Scan();
 
-        var directory = FindOrFetchSourceDirectory(application);
+        var directory = FindOrFetchSourceDirectory(application, source);
         var target = FindRemoteVersion(directory, version, refresh);
 
         // A version released since the versions were cached is not in the cache yet.
@@ -177,7 +180,7 @@ public class ToolManager(
     private bool HasSource(string application)
     {
         var manifest = toolDefinitionProvider.GetManifest(PathUtils.GetRootedPath(settings.RootPath), application);
-        return manifest is { Versioned: true, Install: not null };
+        return manifest is { Flat: false, Install: not null };
     }
 
     private bool UpdateOne(string application, bool refresh)
@@ -208,8 +211,8 @@ public class ToolManager(
         var definition = installed.SingleOrDefault(i => VersionNumber.AreEqual(i.Manifest.Version, version))
             ?? throw new InvalidOperationException($"Version {version} of {application} not found, installed: {installed.Select(i => i.Manifest.Version).Join(", ")}");
 
-        if (!definition.Manifest.Versioned)
-            throw new InvalidOperationException($"{application} in `{definition.Path}` is not versioned, only versions of versioned applications can be removed");
+        if (definition.Manifest.Flat)
+            throw new InvalidOperationException($"{application} in `{definition.Path}` is flat, it has no versions to remove");
 
         var selected = toolSettingsProvider.GetSettings(application).Version;
 
@@ -225,10 +228,10 @@ public class ToolManager(
             : $"{application} has no installed versions left");
     }
 
-    // Manifests from the sources are brought to their synced revision first, an application without them gets them.
-    private string FindOrFetchSourceDirectory(string application)
+    // Manifests from the sources are brought up to date first, an application without them gets them.
+    private string FindOrFetchSourceDirectory(string application, string source = null)
     {
-        if (sources != null && sources.Value.Refresh(application))
+        if (sources != null && sources.Value.Refresh(application, source))
             Scan();
 
         return toolDefinitionProvider.FindSourceDirectory(PathUtils.GetRootedPath(settings.RootPath), application);
@@ -260,7 +263,7 @@ public class ToolManager(
         {
             var toolSettings = toolSettingsProvider.GetSettings(name);
 
-            if (IsNotVersioned(name))
+            if (IsFlat(name))
                 table.AddRow(name, "-", "-", GetStatus(name, toolSettings));
             else
                 table.AddRow(name, FormatVersion(name, toolSettings.Version), SummarizeVersions(name), GetStatus(name, toolSettings));
@@ -279,13 +282,13 @@ public class ToolManager(
     public void Show(string application)
     {
         EnsureScanned();
-        if (!IsKnown(application))
+        if (!IsKnown(application) && (!Rescan() || !IsKnown(application)))
             throw NotFound(application);
 
         var versions = toolDefinitionProvider.GetVersions(application);
         var toolSettings = toolSettingsProvider.GetSettings(application);
         var selected = toolSettings.Version != null ? toolDefinitionProvider.GetVersion(application, toolSettings.Version) : null;
-        var versioned = !IsNotVersioned(application);
+        var versioned = !IsFlat(application);
         var directory = versions.Count == 0
             ? toolDefinitionProvider.FindDirectory(PathUtils.GetRootedPath(settings.RootPath), application)
             : versioned ? Path.GetDirectoryName(versions[0].Path) : versions[0].Path;
@@ -327,18 +330,18 @@ public class ToolManager(
             return "none, versions are added by hand";
 
         if (manifest.Origin == null)
-            return $"local {ToolManifest.FileName}, revision {Math.Max(1, manifest.Revision)}";
+            return $"local {ToolManifest.FileName}";
 
-        return $"{manifest.Origin.Repository}, revision {manifest.Revision}" + (ManifestHash.IsModified(Path.Combine(directory, ToolManifest.FileName)) ? ", changed locally" : "");
+        return manifest.Origin.Repository + (ManifestHash.IsModified(Path.Combine(directory, ToolManifest.FileName)) ? ", changed locally" : "");
     }
 
     public void Select(string application, string version)
     {
         var installed = FindVersions(application);
 
-        if (IsNotVersioned(application))
+        if (IsFlat(application))
         {
-            Console.WriteLine($"{application} is not versioned, there is no version to select");
+            Console.WriteLine($"{application} is flat, there is no version to select");
             return;
         }
 
@@ -364,6 +367,10 @@ public class ToolManager(
             version = choices[selected];
         }
 
+        // A version copied in by hand is found by one more scan.
+        if (toolDefinitionProvider.GetVersion(application, version) == null && Rescan())
+            installed = FindVersions(application);
+
         var toolDefinition = toolDefinitionProvider.GetVersion(application, version)
             ?? throw new InvalidOperationException($"Version {version} of {application} not found, installed: {installed.Select(i => i.Manifest.Version).Join(", ")}");
 
@@ -387,6 +394,9 @@ public class ToolManager(
     {
         EnsureScanned();
         var versions = toolDefinitionProvider.GetVersions(application);
+        if (versions.Count == 0 && Rescan())
+            versions = toolDefinitionProvider.GetVersions(application);
+
         if (versions.Count > 0)
             return versions;
 
@@ -394,6 +404,16 @@ public class ToolManager(
             throw new InvalidOperationException($"{application} has no installed versions, `app install {application}` installs one");
 
         throw NotFound(application);
+    }
+
+    // An application or version added by hand is found without `sc` by one scan when a command misses it.
+    private bool Rescan()
+    {
+        if (scanned || !Directory.Exists(PathUtils.GetRootedPath(settings.RootPath)))
+            return false;
+
+        Scan();
+        return true;
     }
 
     private bool IsKnown(string application)
@@ -422,7 +442,7 @@ public class ToolManager(
         return resolved == null || resolved.Manifest.Version == version ? version : $"{version} ({resolved.Manifest.Version})";
     }
 
-    private bool IsNotVersioned(string application)
+    private bool IsFlat(string application)
     {
         var versions = toolDefinitionProvider.GetVersions(application);
         return versions.Count == 1 && versions[0].Manifest.Version == MetaVersion.Default;

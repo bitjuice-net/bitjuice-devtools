@@ -2,10 +2,10 @@ using System.Collections.Generic;
 
 namespace DevTools.Sources.Models;
 
-// index.json in the root of a manifest repository.
+// index.json in the root of a manifest repository: { "apps": ["age", "java"] }.
 public class RepositoryIndex
 {
     public const string FileName = "index.json";
 
-    public SortedDictionary<string, IndexEntry> Apps { get; set; } = new();
+    public List<string> Apps { get; set; } = new();
 }
