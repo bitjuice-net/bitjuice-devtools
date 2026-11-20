@@ -904,6 +904,17 @@ public sealed class ToolInstallerTests : IDisposable
 
             Assert.Equal("fetched", File.ReadAllText(Path.Combine(root, "tool", "1.0.0", "tool.txt")));
             Assert.Contains("origin", File.ReadAllText(Path.Combine(root, "tool", ".app")));
+            Assert.Equal(repo, settings.GetSettings("tool").Source);
+
+            // The tools directory is lost, config/apps.json is enough to get the application back.
+            Directory.Delete(Path.Combine(root, "tool"), true);
+            withSources.Scan();
+            var listed = TestTools.CaptureConsole(() => withSources.List(false));
+            TestTools.CaptureConsole(() => withSources.Restore());
+
+            Assert.Matches(@"(?m)^tool\s+latest\s+repo\s+not installed\s*$", listed);
+            Assert.Equal("fetched", File.ReadAllText(Path.Combine(root, "tool", "1.0.0", "tool.txt")));
+            Assert.Contains("is installed", TestTools.CaptureConsole(() => withSources.Restore()));
         }
         finally
         {

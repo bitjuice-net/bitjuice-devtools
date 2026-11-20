@@ -23,7 +23,7 @@ internal static class TestTools
     public static MemoryStorage Storage(params (string Name, string[] Versions)[] tools)
     {
         var storage = new MemoryStorage();
-        storage.Save(CacheFile, tools.ToDictionary(i => i.Name, i => i.Versions.Select(v => Definition(i.Name, v)).ToList()));
+        storage.Save(CacheFile, new ScanResult { Apps = new SortedDictionary<string, ScannedApp>(tools.ToDictionary(i => i.Name, i => new ScannedApp { Versions = i.Versions.Select(v => Definition(i.Name, v)).ToList() })) });
         return storage;
     }
 

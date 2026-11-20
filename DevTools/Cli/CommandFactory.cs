@@ -47,6 +47,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         cmd.Subcommands.Add(BuildUpdateCommand());
         cmd.Subcommands.Add(BuildRemoveCommand());
         cmd.Subcommands.Add(BuildResetCommand());
+        cmd.Subcommands.Add(BuildRestoreCommand());
         return cmd;
     }
 
@@ -196,7 +197,15 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         var applicationArgument = new Argument<string>("application");
         var sourceOption = SourceOption();
         var cmd = new Command("reset", "Replace .app of an application with the one from its source, dropping local changes.") { applicationArgument, sourceOption };
-        cmd.SetAction(result => sources.Value.Reset(result.GetValue(applicationArgument), result.GetValue(sourceOption)));
+        cmd.SetAction(result => manager.Reset(result.GetValue(applicationArgument), result.GetValue(sourceOption)));
+        return cmd;
+    }
+
+    private Command BuildRestoreCommand()
+    {
+        var refreshOption = RefreshOption();
+        var cmd = new Command("restore", "Install the applications from repositories in config/apps.json that have no installed version.") { refreshOption };
+        cmd.SetAction(result => manager.Restore(result.GetValue(refreshOption)));
         return cmd;
     }
 

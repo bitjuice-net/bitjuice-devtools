@@ -7,7 +7,7 @@ using DevTools.Sources.Models;
 namespace DevTools.Infrastructure;
 
 // Metadata generated at build time, so reading cache/apps.json does not pay for reflection on every start.
-[JsonSerializable(typeof(Dictionary<string, List<ToolDefinition>>))]
+[JsonSerializable(typeof(ScanResult))]
 [JsonSerializable(typeof(Dictionary<string, ToolSettings>))]
 [JsonSerializable(typeof(ToolManifest))]
 

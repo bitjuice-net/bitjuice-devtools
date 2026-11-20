@@ -84,6 +84,76 @@ public class ToolManager(
     {
         toolDefinitionProvider.Scan(PathUtils.GetRootedPath(settings.RootPath));
         scanned = true;
+        RecordSources();
+    }
+
+    // config/apps.json keeps the repository of every application fetched from one, so `app restore` can install it again.
+    // An application whose .app is no longer from a repository, such as one replaced by hand, is no longer restored.
+    // One that is gone from the tools directory keeps its entry, that is what `app restore` is for.
+    private void RecordSources()
+    {
+        foreach (var name in toolDefinitionProvider.GetNames())
+        {
+            var source = toolDefinitionProvider.GetSource(name);
+            if (toolSettingsProvider.GetSettings(name).Source == source)
+                continue;
+
+            toolSettingsProvider.UpdateSettings(name, s =>
+            {
+                s.Source = source;
+                s.Version ??= MetaVersion.Latest;
+            });
+        }
+    }
+
+    // Installs the applications from repositories in config/apps.json that have no installed version, such as after
+    // the tools directory was lost. The selected version when it is an exact one, otherwise the newest.
+    public void Restore(bool refresh = false)
+    {
+        Scan();
+
+        var names = toolSettingsProvider.GetApplications()
+            .Where(i => toolSettingsProvider.GetSettings(i).Source != null && !toolDefinitionProvider.GetVersions(i).Any())
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        if (names.Count == 0)
+        {
+            Console.WriteLine("Every application from a repository in config/apps.json is installed");
+            return;
+        }
+
+        var failed = new List<string>();
+        foreach (var name in names)
+        {
+            var toolSettings = toolSettingsProvider.GetSettings(name);
+            var version = toolSettings.Version != null && !MetaVersion.IsMeta(toolSettings.Version) ? toolSettings.Version : MetaVersion.Latest;
+
+            try
+            {
+                Install(name, version, refresh, toolSettings.Source);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"{name}: {e.Message}");
+                failed.Add(name);
+            }
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Restored {names.Count - failed.Count}, failed {failed.Count} of {names.Count} application(s)");
+
+        if (failed.Count > 0)
+            throw new InvalidOperationException($"Could not restore {failed.Join(", ")}");
+    }
+
+    public void Reset(string application, string source = null)
+    {
+        if (sources == null)
+            throw new InvalidOperationException("No manifest repositories");
+
+        sources.Value.Reset(application, source);
+        Scan();
     }
 
     // Changes made by hand need `sc`. Only a missing cache is scanned for, a failed scan must not break the console.
@@ -112,6 +182,10 @@ public class ToolManager(
         foreach (var application in toolSettingsProvider.GetApplications())
         {
             var versions = toolDefinitionProvider.GetVersions(application);
+
+            // An application from a repository stays for `app restore`.
+            if (!versions.Any() && toolSettingsProvider.GetSettings(application).Source != null)
+                continue;
 
             if (!versions.Any())
             {
@@ -284,23 +358,35 @@ public class ToolManager(
     public void List(bool all)
     {
         EnsureScanned();
-        var table = new TextTable("NAME", "SELECTED", "INSTALLED", "STATUS");
+        var table = new TextTable("NAME", "SELECTED", "INSTALLED", "SOURCE", "STATUS");
 
-        var names = toolDefinitionProvider.GetNames();
-        if (all)
-            names = names.Union(toolSettingsProvider.GetApplications()).OrderBy(i => i).ToList();
+        // Applications from repositories that are not in the tools directory are listed too, `app restore` installs them.
+        var configured = toolSettingsProvider.GetApplications().Where(i => all || toolSettingsProvider.GetSettings(i).Source != null);
+        var unmanaged = toolDefinitionProvider.GetUnmanaged();
+        var names = toolDefinitionProvider.GetNames().Union(configured).Union(unmanaged).Order(StringComparer.OrdinalIgnoreCase).ToList();
 
         foreach (var name in names)
         {
             var toolSettings = toolSettingsProvider.GetSettings(name);
 
-            if (IsFlat(name))
-                table.AddRow(name, "-", "-", GetStatus(name, toolSettings));
+            if (!IsKnown(name) && unmanaged.Contains(name))
+                table.AddRow(name, "-", "-", "-", "unmanaged");
+            else if (IsFlat(name))
+                table.AddRow(name, "-", "-", DescribeKind(name, toolSettings), GetStatus(name, toolSettings));
             else
-                table.AddRow(name, FormatVersion(name, toolSettings.Version), SummarizeVersions(name), GetStatus(name, toolSettings));
+                table.AddRow(name, FormatVersion(name, toolSettings.Version), SummarizeVersions(name), DescribeKind(name, toolSettings), GetStatus(name, toolSettings));
         }
 
         table.Write();
+    }
+
+    // repo for an application from a repository, local for one with .app made by hand.
+    private string DescribeKind(string application, ToolSettings toolSettings)
+    {
+        if (IsKnown(application))
+            return toolDefinitionProvider.GetSource(application) != null ? "repo" : "local";
+
+        return toolSettings.Source != null ? "repo" : "-";
     }
 
     // Many versions would make the column too wide, `ls <application>` lists all of them.
@@ -314,7 +400,10 @@ public class ToolManager(
     {
         EnsureScanned();
         if (!IsKnown(application) && (!Rescan() || !IsKnown(application)))
-            throw NotFound(application);
+        {
+            ShowUnknown(application);
+            return;
+        }
 
         var versions = toolDefinitionProvider.GetVersions(application);
         var toolSettings = toolSettingsProvider.GetSettings(application);
@@ -351,6 +440,27 @@ public class ToolManager(
         Console.WriteLine(application);
         foreach (var (name, value) in rows)
             Console.WriteLine($"  {name,-10} {value}");
+    }
+
+    // An application only in config/apps.json or a directory without .app.
+    private void ShowUnknown(string application)
+    {
+        var source = toolSettingsProvider.GetApplications().Contains(application) ? toolSettingsProvider.GetSettings(application).Source : null;
+
+        if (source != null)
+        {
+            Console.WriteLine(application);
+            Console.WriteLine($"  {"status",-10} not installed, `app restore` installs it");
+            Console.WriteLine($"  {"source",-10} {source}");
+            return;
+        }
+
+        if (!toolDefinitionProvider.GetUnmanaged().Contains(application))
+            throw NotFound(application);
+
+        Console.WriteLine(application);
+        Console.WriteLine($"  {"status",-10} unmanaged, the directory has no {ToolManifest.FileName}");
+        Console.WriteLine($"  {"directory",-10} {Path.GetFullPath(Path.Combine(PathUtils.GetRootedPath(settings.RootPath), application))}");
     }
 
     private string DescribeSource(string application, string directory)
@@ -482,7 +592,7 @@ public class ToolManager(
     private string GetStatus(string application, ToolSettings toolSettings)
     {
         if (!toolDefinitionProvider.GetVersions(application).Any())
-            return IsKnown(application) ? "not installed" : "orphaned";
+            return IsKnown(application) || toolSettings.Source != null ? "not installed" : "orphaned";
 
         if (toolSettings.Version != null && toolDefinitionProvider.GetVersion(application, toolSettings.Version) == null)
             return "orphaned";

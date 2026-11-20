@@ -92,7 +92,7 @@ public class MetaVersionTests
         TestTools.CaptureConsole(() => manager.Select("node", "latest"));
         Assert.Contains(@"C:\Tools\node\24.11.1", TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
 
-        storage.Load<Dictionary<string, List<ToolDefinition>>>(TestTools.CacheFile)["node"].Add(TestTools.Definition("node", "25.0.0"));
+        storage.Load<ScanResult>(TestTools.CacheFile).Apps["node"].Versions.Add(TestTools.Definition("node", "25.0.0"));
 
         Assert.Contains(@"C:\Tools\node\25.0.0", TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
     }
@@ -101,11 +101,11 @@ public class MetaVersionTests
     public void List_ShowsResolvedVersionAndSummarizesManyVersions()
     {
         TestTools.CaptureConsole(() => manager.Select("node", "oldest"));
-        storage.Load<Dictionary<string, List<ToolDefinition>>>(TestTools.CacheFile)["node"].Add(TestTools.Definition("node", "25.0.0"));
+        storage.Load<ScanResult>(TestTools.CacheFile).Apps["node"].Versions.Add(TestTools.Definition("node", "25.0.0"));
 
         var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("node "));
 
-        Assert.Equal(new[] { "node", "oldest (8.9.3)", "8.9.3 - 25.0.0 (4 versions)" }, row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        Assert.Equal(new[] { "node", "oldest (8.9.3)", "8.9.3 - 25.0.0 (4 versions)", "local" }, row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     [Fact]

@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using DevTools.Catalog;
+using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
 using DevTools.Management;
 using Microsoft.Extensions.Options;
@@ -210,7 +212,7 @@ public sealed class ScanTests : IDisposable
 
         var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("bin "));
 
-        Assert.Equal(new[] { "bin", "-", "-" }, row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        Assert.Equal(new[] { "bin", "-", "-", "local" }, row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         Assert.Contains(Path.Combine(root, "bin", "x"), TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
     }
 
@@ -350,5 +352,73 @@ public sealed class ScanTests : IDisposable
 
         Assert.Contains("Could not scan", error);
         Assert.Contains("export DT_PATH=", output);
+    }
+
+    [Fact]
+    public void Scan_ListsDirectoriesWithoutManifestAsUnmanaged()
+    {
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
+        Manifest("group/inner", """{ "name": "inner", "flat": true }""");
+        Dirs("java/1.0.0", "android-studio", ".git");
+        var manager = Manager();
+        manager.Scan();
+
+        var list = TestTools.CaptureConsole(() => manager.List(false));
+
+        Assert.Equal(new[] { "java" }, definitions.GetNames());
+        Assert.Equal(new[] { "android-studio", "group" }, definitions.GetUnmanaged());
+        Assert.Matches(@"(?m)^android-studio\s+-\s+-\s+-\s+unmanaged\s*$", list);
+        Assert.Matches(@"(?m)^java\s+latest \(1\.0\.0\)\s+1\.0\.0\s+local\s*$", list);
+        Assert.DoesNotContain(".git", list);
+        Assert.Contains("unmanaged", TestTools.CaptureConsole(() => manager.Show("android-studio")));
+    }
+
+    [Fact]
+    public void Scan_RecordsTheRepositoryOfFetchedApplications()
+    {
+        Manifest("age", """{ "name": "age", "paths": ["%APPDIR%"], "origin": { "repository": "owner/apps", "sha256": "x" } }""");
+        Manifest("go", """{ "name": "go", "paths": ["%APPDIR%"] }""");
+        Dirs("go/1.0.0");
+        var tools = new ToolSettingsProvider(storage, definitions);
+        var manager = Manager(tools);
+
+        manager.Scan();
+
+        Assert.Equal("owner/apps", tools.GetSettings("age").Source);
+        Assert.Equal("latest", tools.GetSettings("age").Version);
+        Assert.Null(tools.GetSettings("go").Source);
+        Assert.Matches(@"(?m)^age\s+latest\s+repo\s+not installed\s*$", TestTools.CaptureConsole(() => manager.List(false)));
+
+        Manifest("age", """{ "name": "age", "paths": ["%APPDIR%"] }""");
+        manager.Scan();
+
+        Assert.Null(tools.GetSettings("age").Source);
+    }
+
+    [Fact]
+    public void ApplicationFromARepositoryThatIsGone_IsListedAndKeptByPrune()
+    {
+        Dirs("java");
+        var tools = new ToolSettingsProvider(storage, definitions);
+        tools.UpdateSettings("age", s => { s.Source = "owner/apps"; s.Version = "latest"; });
+        var manager = Manager(tools);
+
+        TestTools.CaptureConsole(manager.Prune);
+
+        Assert.Matches(@"(?m)^age\s+latest\s+repo\s+not installed\s*$", TestTools.CaptureConsole(() => manager.List(false)));
+        Assert.Contains("`app restore`", TestTools.CaptureConsole(() => manager.Show("age")));
+        Assert.Equal("owner/apps", tools.GetSettings("age").Source);
+    }
+
+    [Fact]
+    public void CacheOfAnEarlierVersion_IsScannedAgain()
+    {
+        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
+        Dirs("java/1.0.0");
+        // An earlier cache was a dictionary of versions, read as a result without apps.
+        storage.Save(TestTools.CacheFile, new ScanResult());
+
+        Assert.False(definitions.IsScanned());
+        Assert.Contains(Path.Combine(root, "java", "1.0.0"), TestTools.CaptureConsole(() => Manager().GetEnv(Shell.Bash)));
     }
 }

@@ -17,8 +17,9 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         IgnoreInaccessible = true
     };
 
-    private Dictionary<string, List<ToolDefinition>> tools;
-    private Dictionary<string, List<ToolDefinition>> Tools => tools ??= storage.Load<Dictionary<string, List<ToolDefinition>>>(FileName);
+    private ScanResult scanned;
+    private ScanResult Scanned => scanned ??= storage.Load<ScanResult>(FileName);
+    private SortedDictionary<string, ScannedApp> Tools => Scanned.Apps ?? new SortedDictionary<string, ScannedApp>();
 
     public List<string> GetNames()
     {
@@ -27,9 +28,19 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 
     public List<ToolDefinition> GetVersions(string application)
     {
-        return Tools.TryGetValue(application, out var versions) 
-            ? versions.OrderBy(i => VersionNumber.TryParse(i.Manifest.Version, out var v) ? v : new Version()).ToList() 
+        return Tools.TryGetValue(application, out var app)
+            ? app.Versions.OrderBy(i => VersionNumber.TryParse(i.Manifest.Version, out var v) ? v : new Version()).ToList()
             : new List<ToolDefinition>();
+    }
+
+    public string GetSource(string application)
+    {
+        return Tools.GetValueOrDefault(application)?.Source;
+    }
+
+    public List<string> GetUnmanaged()
+    {
+        return Scanned.Unmanaged ?? new List<string>();
     }
 
     public ToolDefinition GetVersion(string application, string version)
@@ -63,29 +74,37 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         ThrowOnDuplicateVersions(apps);
 
         // An application without installed versions is known too, with an empty list.
-        var scannedTools = found.Select(i => i.Manifest.Name).Distinct().ToDictionary(i => i, _ => new List<ToolDefinition>());
+        var result = new ScanResult { Apps = new SortedDictionary<string, ScannedApp>(StringComparer.Ordinal) };
+        foreach (var (_, manifest) in found)
+        {
+            var app = result.Apps.TryGetValue(manifest.Name, out var known) ? known : result.Apps[manifest.Name] = new ScannedApp();
+            app.Source ??= manifest.Origin?.Repository;
+        }
+
         foreach (var app in apps)
-            scannedTools[app.Manifest.Name].Add(app);
+            result.Apps[app.Manifest.Name].Versions.Add(app);
 
-        // A scan that finds the same applications changes nothing, shells do not need to reload for it.
-        if (!storage.Exists(FileName) || Fingerprint(Tools) != Fingerprint(scannedTools))
-            storage.Save(FileName, scannedTools);
+        // A directory named like an application, such as one left by hand next to it, is not listed twice.
+        result.Unmanaged = ListUnmanaged(directory).Where(i => !result.Apps.ContainsKey(i)).ToList();
 
-        tools = scannedTools;
+        // Only what shells load changes the state, so a scan that finds nothing new does not make them reload.
+        var changesState = !IsScanned() || Fingerprint(Tools) != Fingerprint(result.Apps);
+        storage.Save(FileName, result, changesState);
+        scanned = result;
     }
 
-    private static string Fingerprint(Dictionary<string, List<ToolDefinition>> applications)
+    private static string Fingerprint(IDictionary<string, ScannedApp> applications)
     {
         return applications.OrderBy(i => i.Key, StringComparer.Ordinal)
-            .SelectMany(i => i.Value.Select(d => $"{i.Key}|{d.Path}|{d.Manifest.Version}|{d.Manifest.Flat}|{d.Manifest.Paths?.Join(";")}|{d.Manifest.Envs?.Select(e => e.Key + "=" + e.Value).Join(";")}").Prepend(i.Key))
+            .SelectMany(i => i.Value.Versions.Select(d => $"{i.Key}|{d.Path}|{d.Manifest.Version}|{d.Manifest.Flat}|{d.Manifest.Paths?.Join(";")}|{d.Manifest.Envs?.Select(e => e.Key + "=" + e.Value).Join(";")}").Prepend(i.Key))
             .Order(StringComparer.Ordinal)
             .Join("\n");
     }
 
-    // Changes made by hand are found by `sc`, a deleted cache by the next command.
+    // Changes made by hand are found by `sc`, a deleted cache or one of an earlier version by the next command.
     public bool IsScanned()
     {
-        return storage.Exists(FileName);
+        return storage.Exists(FileName) && Scanned.Apps != null;
     }
 
     public string FindSourceDirectory(string root, string application)
@@ -128,18 +147,33 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         return directories.SingleOrDefault().Directory?.FullName;
     }
 
-    private IEnumerable<(DirectoryInfo Directory, ToolManifest Manifest)> Scan(DirectoryInfo directory)
+    // Every directory of the tools directory is an application, the ones with .app are managed.
+    private IEnumerable<(DirectoryInfo Directory, ToolManifest Manifest)> Scan(DirectoryInfo root)
     {
-        var manifestPath = Path.Combine(directory.FullName, ToolManifest.FileName);
-        if (File.Exists(manifestPath))
+        foreach (var child in Applications(root))
         {
-            yield return (directory, storage.Load<ToolManifest>(manifestPath));
-            yield break;
+            var manifestPath = Path.Combine(child.FullName, ToolManifest.FileName);
+            if (File.Exists(manifestPath))
+                yield return (child, storage.Load<ToolManifest>(manifestPath));
         }
+    }
 
-        foreach (var child in directory.EnumerateDirectories("*", ScanOptions))
-        foreach (var app in Scan(child))
-            yield return app;
+    private static IEnumerable<string> ListUnmanaged(DirectoryInfo root)
+    {
+        return Applications(root)
+            .Where(i => !File.Exists(Path.Combine(i.FullName, ToolManifest.FileName)))
+            .Select(i => i.Name);
+    }
+
+    // devtools itself and hidden directories, such as .git, are not applications.
+    private static IEnumerable<DirectoryInfo> Applications(DirectoryInfo root)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var devtools = Path.TrimEndingDirectorySeparator(PathUtils.AssemblyDirectory);
+
+        return root.EnumerateDirectories("*", ScanOptions)
+            .Where(i => !i.Name.StartsWith('.') && !string.Equals(Path.TrimEndingDirectorySeparator(i.FullName), devtools, comparison))
+            .OrderBy(i => i.Name, StringComparer.Ordinal);
     }
 
     private static IEnumerable<ToolDefinition> CreateDefinitions((DirectoryInfo Directory, ToolManifest Manifest) app)
