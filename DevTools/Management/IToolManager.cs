@@ -3,6 +3,7 @@
 public interface IToolManager
 {
     void GetEnv(Shell shell);
+    void WriteEnvScript();
     void Scan();
     void Prune();
     void Install(string application, string version, bool refresh = false, string source = null);

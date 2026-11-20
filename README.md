@@ -28,6 +28,10 @@ D:\Tools
    `devtools shell uninstall` removes it again.
 3. Open a new console. It has the `dt` command, which runs devtools and applies the changes to the console right away.
 
+After every change devtools writes `cache/env.cmd` (Windows) or `cache/env.sh` with PATH and the variables of the selected
+tools. A new console and `dt` only run that script, devtools itself is not started for it. `%NAME%` in a manifest is
+replaced when the script is written, with the variables devtools had then.
+
 The tools directory is the parent of the devtools directory. Another one can be set in `config/settings.json`,
 see `config/settings.json.example`.
 
@@ -145,6 +149,7 @@ Next to devtools, `config` keeps what you chose and `cache` what devtools can re
 | `cache/apps.json` | applications found in the tools directory |
 | `cache/versions.json` | versions found by the version sources, kept for an hour |
 | `cache/state` | changes on every save, `dt` reloads the console only when it changed |
+| `cache/env.cmd`, `cache/env.sh` | PATH and variables of the selected tools, run by new consoles and `dt` |
 
 Any file in `cache`, or the whole directory, may be deleted, the next command rebuilds it.
 

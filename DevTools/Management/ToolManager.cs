@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using DevTools.Catalog;
 using DevTools.Catalog.Models;
 using DevTools.Infrastructure;
@@ -27,10 +28,42 @@ public class ToolManager(
     // Created on first use, only install, update and remove download anything.
     private IToolInstaller toolInstaller => installer.Value;
 
+    // Writes the script of the shell and prints its commands, for hooks of earlier versions.
     public void GetEnv(Shell shell)
     {
         EnsureScanned();
 
+        var (paths, envs) = BuildEnv();
+        var state = JsonStorage.ReadState(PathUtils.StateFile);
+        WriteEnvScript(shell, paths, envs, state);
+
+        Console.WriteLine(ShellScripts.Env(shell, paths, envs, Environment.GetEnvironmentVariable, state));
+    }
+
+    // After every change, so a console loads PATH and variables without starting devtools.
+    public void WriteEnvScript()
+    {
+        var (paths, envs) = BuildEnv();
+        WriteEnvScript(OperatingSystem.IsWindows() ? Shell.Cmd : Shell.Bash, paths, envs, JsonStorage.ReadState(PathUtils.StateFile));
+    }
+
+    private static void WriteEnvScript(Shell shell, List<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, string state)
+    {
+        var fileName = PathUtils.GetCachePath(ShellScripts.ScriptFileName(shell));
+        var script = ShellScripts.Script(shell, paths, envs, state);
+
+        // cmd reads a batch file in the code page of the console, the shells of other systems in UTF-8.
+        var encoding = shell == Shell.Cmd && Console.OutputEncoding is not UTF8Encoding ? Console.OutputEncoding : new UTF8Encoding(false);
+
+        // A console may read the script at any time, so it is replaced in one step.
+        Directory.CreateDirectory(Path.GetDirectoryName(fileName)!);
+        var temporary = fileName + ".tmp";
+        File.WriteAllText(temporary, script, encoding);
+        File.Move(temporary, fileName, overwrite: true);
+    }
+
+    private (List<string> Paths, IReadOnlyList<KeyValuePair<string, string>> Envs) BuildEnv()
+    {
         var pathBuilder = new PathBuilder();
         var envsBuilder = new EnvsBuilder();
 
@@ -41,9 +74,7 @@ public class ToolManager(
         }
 
         // devtools itself (and dt.cmd next to it) stays on PATH after the tools.
-        var paths = pathBuilder.Values.Append(PathUtils.AssemblyDirectory);
-
-        Console.WriteLine(ShellScripts.Env(shell, paths, envsBuilder.Values, Environment.GetEnvironmentVariable, JsonStorage.ReadState(PathUtils.StateFile)));
+        return (pathBuilder.Values.Append(PathUtils.AssemblyDirectory).ToList(), envsBuilder.Values);
     }
 
     // Set by a scan in this command, so a missing application or version is not scanned for twice.

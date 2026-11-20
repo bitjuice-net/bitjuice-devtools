@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using DevTools.Management;
 using Xunit;
 
@@ -137,18 +139,22 @@ public class ShellScriptsTests
     public void Hook_PosixShellsDefineDtAndReload(Shell shell, string name)
     {
         var script = ShellScripts.Hook(shell, "/opt/dev tools/devtools");
+        var file = ShellScripts.ScriptFile(shell, "/opt/dev tools/devtools");
 
-        Assert.Contains($"env=\"$('/opt/dev tools/devtools' shell env {name})\"", script);
+        Assert.EndsWith(Path.Combine("cache", "env.sh"), file);
+        Assert.Contains($". '{file}'", script);
+        Assert.Contains($"'/opt/dev tools/devtools' shell env {name} >/dev/null && . '{file}'", script);
         Assert.Contains("dt() {", script);
         Assert.DoesNotContain("\r", script);
     }
 
     [Fact]
-    public void Hook_CmdMarksInitializedBeforeRunningEnv()
+    public void Hook_CmdRunsTheScriptAndWritesItWhenItIsMissing()
     {
         var command = ShellScripts.Hook(Shell.Cmd, @"C:\Program Files\devtools\devtools.exe");
 
-        Assert.Equal("""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & for /f "delims=" %i in ('""C:\Program Files\devtools\devtools.exe" shell env cmd"') do @%i)""", command);
+        Assert.Equal("""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & (if not exist "C:\Program Files\devtools\cache\env.cmd" "C:\Program Files\devtools\devtools.exe" shell env cmd >nul) & call "C:\Program Files\devtools\cache\env.cmd")""",
+            command);
     }
 
     [Theory]
@@ -225,5 +231,72 @@ public class ShellScriptsTests
         var env = ShellScripts.Env(Shell.Bash, new[] { "/a" }, Array.Empty<KeyValuePair<string, string>>(), Env(("PATH", "/usr/bin")), "42");
 
         Assert.Contains("export DT_STATE='42'", env);
+    }
+
+    [Fact]
+    public void Script_PosixReadsBasePathAndOldVariablesInTheShell()
+    {
+        var script = ShellScripts.Script(Shell.Bash, new[] { "/a", "/b" }, Envs, "42");
+
+        Assert.Contains("export DT_BASEPATH=\"${DT_BASEPATH:-$PATH}\"", script);
+        Assert.Contains("[ -n \"${DT_ENVS-}\" ] && eval \"unset $DT_ENVS\"", script);
+        Assert.Contains("export GREETING='it'\\''s $HOME `x`'", script);
+        Assert.Contains("export DT_ENVS='JAVA_HOME GREETING'", script);
+        Assert.Contains("export PATH='/a:/b'\"${DT_BASEPATH:+:$DT_BASEPATH}\"", script);
+        Assert.Contains("export DT_STATE='42'", script);
+        Assert.DoesNotContain("\r", script);
+    }
+
+    [Fact]
+    public void Script_CmdDoublesPercentAndHidesEveryLine()
+    {
+        var script = ShellScripts.Script(Shell.Cmd, new[] { @"D:\a%b" }, new KeyValuePair<string, string>[] { new("X", "100% & more") }, "42");
+        var lines = script.TrimEnd().Split("\r\n");
+
+        Assert.Contains("""@set "X=100%% & more" """.TrimEnd(), lines);
+        Assert.Contains("""@set "PATH=D:\a%%b;%DT_BASEPATH%" """.TrimEnd(), lines);
+        Assert.All(lines, i => Assert.True(i.StartsWith('@') || i.StartsWith(':'), i));
+    }
+
+    // Runs the script in cmd twice, like a console after two changes: the second one removes what the first set.
+    [Fact]
+    public void Script_CmdSetsPathAndVariablesAndRemovesOldOnes()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var directory = Directory.CreateTempSubdirectory("devtools-env-").FullName;
+        try
+        {
+            var first = Path.Combine(directory, "first.cmd");
+            var second = Path.Combine(directory, "second.cmd");
+            File.WriteAllText(first, ShellScripts.Script(Shell.Cmd, new[] { @"D:\one" },
+                new KeyValuePair<string, string>[] { new("ProgramFiles(x86)", "x"), new("DT_OLD", "1") }, "1"));
+            File.WriteAllText(second, ShellScripts.Script(Shell.Cmd, new[] { @"D:\two" },
+                new KeyValuePair<string, string>[] { new("DT_NEW", "50% & (y)") }, "2"));
+            var test = Path.Combine(directory, "test.cmd");
+            File.WriteAllText(test, $"""
+                @echo off
+                set "DT_BASEPATH=" & set "DT_ENVS="
+                set "PATH=C:\base"
+                call "{first}"
+                call "{second}"
+                echo [%PATH%]
+                echo ["%DT_NEW%"]
+                echo [%DT_OLD%][%ProgramFiles(x86)%][%DT_STATE%][%DT_BASEPATH%]
+                """.ReplaceLineEndings("\r\n"));
+
+            var process = Process.Start(new ProcessStartInfo("cmd.exe", $"/d /c \"{test}\"") { RedirectStandardOutput = true, UseShellExecute = false })!;
+            var output = process.StandardOutput.ReadToEnd().Split("\r\n");
+            process.WaitForExit();
+
+            Assert.Equal(@"[D:\two;C:\base]", output[0]);
+            Assert.Equal("[\"50% & (y)\"]", output[1]);
+            Assert.Equal(@"[][][2][C:\base]", output[2]);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
     }
 }

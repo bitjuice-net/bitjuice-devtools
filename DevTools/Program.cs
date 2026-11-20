@@ -26,9 +26,11 @@ internal class Program
             .AddJsonFile(Path.Combine(PathUtils.ConfigDirectoryName, "settings.json"), optional: true)
             .Build();
 
+        var app = BuildApp(config);
+
         try
         {
-            return BuildApp(config)
+            return app
                 .GetRequiredService<ICommandFactory>()
                 .CreateRootCommand()
                 .Parse(args)
@@ -38,6 +40,26 @@ internal class Program
         {
             Console.Error.WriteLine($"Error: {e.Message}");
             return 1;
+        }
+        finally
+        {
+            WriteEnvScript(app);
+        }
+    }
+
+    // Also after a failed command, what it saved before failing is loaded by the shells too.
+    private static void WriteEnvScript(IServiceProvider app)
+    {
+        if (app.GetRequiredService<IStorage>() is not JsonStorage { StateChanged: true })
+            return;
+
+        try
+        {
+            app.GetRequiredService<IToolManager>().WriteEnvScript();
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine($"Could not write the script that consoles load, `dt shell env` writes it: {e.Message}");
         }
     }
 

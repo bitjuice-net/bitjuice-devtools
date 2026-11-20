@@ -10,6 +10,9 @@ public class JsonStorage : IStorage
 {
     private readonly string stateFile;
 
+    // Set by the first save that changes the state, devtools then writes the scripts the shells load.
+    public bool StateChanged { get; private set; }
+
     public JsonStorage() : this(PathUtils.StateFile)
     {
     }
@@ -55,6 +58,7 @@ public class JsonStorage : IStorage
         {
             Directory.CreateDirectory(Path.GetDirectoryName(stateFile)!);
             File.WriteAllText(stateFile, DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture));
+            StateChanged = true;
         }
     }
 
