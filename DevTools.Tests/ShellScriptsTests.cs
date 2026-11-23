@@ -151,10 +151,15 @@ public class ShellScriptsTests
     [Fact]
     public void Hook_CmdRunsTheScriptAndWritesItWhenItIsMissing()
     {
-        var command = ShellScripts.Hook(Shell.Cmd, @"C:\Program Files\devtools\devtools.exe");
+        const string exe = @"C:\Program Files\devtools\devtools.exe";
+        var command = ShellScripts.Hook(Shell.Cmd, exe);
 
-        Assert.Equal("""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & (if not exist "C:\Program Files\devtools\cache\env.cmd" "C:\Program Files\devtools\devtools.exe" shell env cmd >nul) & call "C:\Program Files\devtools\cache\env.cmd")""",
+        // The path of the script comes from the system the tests run on, a Windows path has no directory on Linux.
+        var script = ShellScripts.ScriptFile(Shell.Cmd, exe);
+        Assert.Equal($"""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & (if not exist "{script}" "{exe}" shell env cmd >nul) & call "{script}")""",
             command);
+        if (OperatingSystem.IsWindows())
+            Assert.Equal(@"C:\Program Files\devtools\cache\env.cmd", script);
     }
 
     [Theory]
