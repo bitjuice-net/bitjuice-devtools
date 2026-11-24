@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using DevTools.Catalog;
@@ -28,35 +29,45 @@ public class ToolManager(
     // Created on first use, only install, update and remove download anything.
     private IToolInstaller toolInstaller => installer.Value;
 
-    // Writes the script of the shell, init.cmd and init.sh run it when it is missing or outdated, and prints it.
+    // Writes the script of the shell when it changed and prints it. init.cmd and init.sh run `shell env` when the script
+    // is missing or older than the state.
     public void GetEnv(Shell shell)
+    {
+        Console.Write(WriteEnvScript(shell));
+    }
+
+    // After every command. What shells load can also change without devtools, such as a version copied in by hand, so the
+    // script is built every time and written, with a new state that makes shells reload, only when it differs.
+    public void WriteEnvScript()
+    {
+        WriteEnvScript(OperatingSystem.IsWindows() ? Shell.Cmd : Shell.Bash);
+    }
+
+    private string WriteEnvScript(Shell shell)
     {
         EnsureScanned();
 
         var (paths, envs) = BuildEnv();
-        Console.Write(WriteEnvScript(shell, paths, envs, JsonStorage.ReadState(PathUtils.StateFile)));
-    }
-
-    // After every change, so a console loads PATH and variables without starting devtools.
-    public void WriteEnvScript()
-    {
-        var (paths, envs) = BuildEnv();
-        WriteEnvScript(OperatingSystem.IsWindows() ? Shell.Cmd : Shell.Bash, paths, envs, JsonStorage.ReadState(PathUtils.StateFile));
-    }
-
-    private static string WriteEnvScript(Shell shell, List<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, string state)
-    {
         var fileName = PathUtils.GetCachePath(ShellScripts.ScriptFileName(shell));
-        var script = ShellScripts.Script(shell, paths, envs, state);
 
         // cmd reads a batch file in the code page of the console, the shells of other systems in UTF-8.
         var encoding = shell == Shell.Cmd && Console.OutputEncoding is not UTF8Encoding ? Console.OutputEncoding : new UTF8Encoding(false);
 
-        // A console may read the script at any time, so it is replaced in one step.
+        var state = File.Exists(PathUtils.StateFile) ? File.ReadAllText(PathUtils.StateFile).Trim() : "";
+        var script = ShellScripts.Script(shell, paths, envs, state);
+        if (File.Exists(fileName) && File.ReadAllText(fileName, encoding) == script)
+            return script;
+
+        state = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+        script = ShellScripts.Script(shell, paths, envs, state);
+
+        // A console may read the script at any time, so it is replaced in one step, and before the state, so a console
+        // that sees the new state finds the new script.
         Directory.CreateDirectory(Path.GetDirectoryName(fileName)!);
         var temporary = fileName + ".tmp";
         File.WriteAllText(temporary, script, encoding);
         File.Move(temporary, fileName, overwrite: true);
+        File.WriteAllText(PathUtils.StateFile, state);
         return script;
     }
 
@@ -75,7 +86,7 @@ public class ToolManager(
         return (pathBuilder.Values.Append(PathUtils.AssemblyDirectory).ToList(), envsBuilder.Values);
     }
 
-    // Set by a scan in this command, so a missing application or version is not scanned for twice.
+    // Set by the scan of this command, commands that change the tools directory scan again.
     private bool scanned;
 
     public void Scan()
@@ -154,21 +165,11 @@ public class ToolManager(
         Scan();
     }
 
-    // Changes made by hand need `sc`. Only a missing cache is scanned for, a failed scan must not break the console.
+    // The tools directory is scanned once in every command, so changes made by hand are found right away.
     private void EnsureScanned()
     {
-        var root = PathUtils.GetRootedPath(settings.RootPath);
-        if (scanned || !Directory.Exists(root) || toolDefinitionProvider.IsScanned())
-            return;
-
-        try
-        {
+        if (!scanned)
             Scan();
-        }
-        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        {
-            Console.Error.WriteLine($"Could not scan {root}, using the previous list of applications: {e.Message}");
-        }
     }
 
     public void Prune()
@@ -397,7 +398,7 @@ public class ToolManager(
     public void Show(string application)
     {
         EnsureScanned();
-        if (!IsKnown(application) && (!Rescan() || !IsKnown(application)))
+        if (!IsKnown(application))
         {
             ShowUnknown(application);
             return;
@@ -506,10 +507,6 @@ public class ToolManager(
             version = choices[selected];
         }
 
-        // A version copied in by hand is found by one more scan.
-        if (toolDefinitionProvider.GetVersion(application, version) == null && Rescan())
-            installed = FindVersions(application);
-
         var toolDefinition = toolDefinitionProvider.GetVersion(application, version)
             ?? throw new InvalidOperationException($"Version {version} of {application} not found, installed: {installed.Select(i => i.Manifest.Version).Join(", ")}");
 
@@ -533,8 +530,6 @@ public class ToolManager(
     {
         EnsureScanned();
         var versions = toolDefinitionProvider.GetVersions(application);
-        if (versions.Count == 0 && Rescan())
-            versions = toolDefinitionProvider.GetVersions(application);
 
         if (versions.Count > 0)
             return versions;
@@ -545,16 +540,6 @@ public class ToolManager(
         throw NotFound(application);
     }
 
-    // An application or version added by hand is found without `sc` by one scan when a command misses it.
-    private bool Rescan()
-    {
-        if (scanned || !Directory.Exists(PathUtils.GetRootedPath(settings.RootPath)))
-            return false;
-
-        Scan();
-        return true;
-    }
-
     private bool IsKnown(string application)
     {
         return toolDefinitionProvider.GetNames().Contains(application);
@@ -562,7 +547,7 @@ public class ToolManager(
 
     private static InvalidOperationException NotFound(string application)
     {
-        return new InvalidOperationException($"{application} not found, `ls` lists the applications and `sc` finds new ones");
+        return new InvalidOperationException($"{application} not found, `ls` lists the applications");
     }
 
     private string FormatVersion(string application, string version)

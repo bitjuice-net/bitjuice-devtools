@@ -7,19 +7,18 @@ using DevTools.Infrastructure;
 
 namespace DevTools.Catalog;
 
+// What is in the tools directory, found by a scan in every command. Every directory is an application, one with .app is
+// managed by devtools, one without it is only listed.
 public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 {
-    private static readonly string FileName = PathUtils.GetCachePath("apps.json");
-
     private static readonly EnumerationOptions ScanOptions = new()
     {
         AttributesToSkip = FileAttributes.ReparsePoint,
         IgnoreInaccessible = true
     };
 
-    private ScanResult scanned;
-    private ScanResult Scanned => scanned ??= storage.Load<ScanResult>(FileName);
-    private SortedDictionary<string, ScannedApp> Tools => Scanned.Apps;
+    private ScanResult scanned = new();
+    private SortedDictionary<string, ScannedApp> Tools => scanned.Apps;
 
     public List<string> GetNames()
     {
@@ -40,7 +39,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 
     public List<string> GetUnmanaged()
     {
-        return Scanned.Unmanaged ?? new List<string>();
+        return scanned.Unmanaged;
     }
 
     public ToolDefinition GetVersion(string application, string version)
@@ -59,52 +58,59 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
         };
     }
 
+    // A broken .app is skipped with a warning, so one application does not stop devtools for the others.
     public void Scan(string root)
     {
-        if (root == null) 
+        if (root == null)
             throw new ArgumentNullException(nameof(root));
 
         var directory = new DirectoryInfo(root);
-        if(!directory.Exists)
-            throw new ArgumentException($"Directory do not exists `{root}`", nameof(root));
-
-        var found = Scan(directory).ToList();
-        var apps = found.SelectMany(CreateDefinitions).ToList();
-
-        ThrowOnDuplicateVersions(apps);
-
-        // An application without installed versions is known too, with an empty list.
         var result = new ScanResult { Apps = new SortedDictionary<string, ScannedApp>(StringComparer.Ordinal) };
-        foreach (var (_, manifest) in found)
+
+        if (!directory.Exists)
         {
-            var app = result.Apps.TryGetValue(manifest.Name, out var known) ? known : result.Apps[manifest.Name] = new ScannedApp();
-            app.Source ??= manifest.Origin?.Repository;
+            scanned = result;
+            return;
         }
 
-        foreach (var app in apps)
-            result.Apps[app.Manifest.Name].Versions.Add(app);
+        var found = new List<(DirectoryInfo Directory, ToolManifest Manifest, List<ToolDefinition> Versions)>();
+        foreach (var child in Applications(directory).Where(i => File.Exists(Path.Combine(i.FullName, ToolManifest.FileName))))
+        {
+            try
+            {
+                var manifest = storage.Load<ToolManifest>(Path.Combine(child.FullName, ToolManifest.FileName));
+                found.Add((child, manifest, CreateDefinitions((child, manifest)).ToList()));
+            }
+            catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                Console.Error.WriteLine($"Skipped `{child.FullName}`: {e.Message}");
+            }
+        }
+
+        // Two directories of one application with the same version cannot both be used, so the application is skipped.
+        foreach (var application in found.GroupBy(i => i.Manifest.Name))
+        {
+            var duplicate = application.SelectMany(i => i.Versions)
+                .GroupBy(i => VersionNumber.Normalize(i.Manifest.Version))
+                .FirstOrDefault(i => i.Count() > 1);
+
+            if (duplicate != null)
+            {
+                Console.Error.WriteLine($"Skipped {application.Key}: version {duplicate.Key} is defined more than once: {duplicate.Select(i => i.Path).Join(", ")}");
+                continue;
+            }
+
+            // An application without installed versions is known too, with an empty list.
+            result.Apps[application.Key] = new ScannedApp
+            {
+                Source = application.Select(i => i.Manifest.Origin?.Repository).FirstOrDefault(i => i != null),
+                Versions = application.SelectMany(i => i.Versions).ToList()
+            };
+        }
 
         // A directory named like an application, such as one left by hand next to it, is not listed twice.
         result.Unmanaged = ListUnmanaged(directory).Where(i => !result.Apps.ContainsKey(i)).ToList();
-
-        // Only what shells load changes the state, so a scan that finds nothing new does not make them reload.
-        var changesState = !IsScanned() || Fingerprint(Tools) != Fingerprint(result.Apps);
-        storage.Save(FileName, result, changesState);
         scanned = result;
-    }
-
-    private static string Fingerprint(IDictionary<string, ScannedApp> applications)
-    {
-        return applications.OrderBy(i => i.Key, StringComparer.Ordinal)
-            .SelectMany(i => i.Value.Versions.Select(d => $"{i.Key}|{d.Path}|{d.Manifest.Version}|{d.Manifest.Flat}|{d.Manifest.Paths?.Join(";")}|{d.Manifest.Envs?.Select(e => e.Key + "=" + e.Value).Join(";")}").Prepend(i.Key))
-            .Order(StringComparer.Ordinal)
-            .Join("\n");
-    }
-
-    // Changes made by hand are found by `sc`, a deleted cache by the next command.
-    public bool IsScanned()
-    {
-        return storage.Exists(FileName);
     }
 
     public string FindSourceDirectory(string root, string application)
@@ -213,16 +219,5 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
                 Envs = manifest.Envs
             }
         };
-    }
-
-    private static void ThrowOnDuplicateVersions(IEnumerable<ToolDefinition> apps)
-    {
-        var duplicate = apps
-            .GroupBy(i => (i.Manifest.Name, Version: VersionNumber.Normalize(i.Manifest.Version)))
-            .FirstOrDefault(i => i.Count() > 1);
-
-        if (duplicate != null)
-            throw new InvalidOperationException(
-                $"Version {duplicate.Key.Version} of {duplicate.Key.Name} is defined more than once: {duplicate.Select(i => i.Path).Join(", ")}");
     }
 }

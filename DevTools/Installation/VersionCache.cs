@@ -34,7 +34,7 @@ public class VersionCache(IStorage storage, TimeProvider time = null)
 
     public void Set(string application, string key, List<RemoteVersion> versions)
     {
-        storage.Save(FileName(application), new CachedVersions { Key = key, Time = time.GetUtcNow(), Versions = versions }, changesState: false);
+        storage.Save(FileName(application), new CachedVersions { Key = key, Time = time.GetUtcNow(), Versions = versions });
     }
 
     private bool IsExpired(CachedVersions entry)

@@ -11,19 +11,46 @@ using Xunit;
 
 namespace DevTools.Tests;
 
-public class MetaVersionTests
+public sealed class MetaVersionTests : IDisposable
 {
-    private readonly MemoryStorage storage = TestTools.Storage(("node", new[] { "8.9.3", "24.11.1", "12.18.1" }));
+    private readonly string root = Directory.CreateTempSubdirectory("devtools-tests-").FullName;
+    private readonly MemoryStorage storage = new();
     private readonly ToolDefinitionProvider definitions;
     private readonly ToolSettingsProvider settings;
     private readonly ToolManager manager;
 
     public MetaVersionTests()
     {
+        Directory.CreateDirectory(Path.Combine(root, "node"));
+        File.WriteAllText(Path.Combine(root, "node", ".app"), """{ "name": "node", "paths": ["%APPDIR%"] }""");
+        foreach (var version in new[] { "8.9.3", "24.11.1", "12.18.1" })
+            AddVersion(version);
+
         definitions = new ToolDefinitionProvider(storage);
         settings = new ToolSettingsProvider(storage, definitions);
-        // A tools directory that does not exist, so commands use the prepared cache instead of scanning.
-        manager = new ToolManager(Options.Create(new Settings { RootPath = Path.Combine(Path.GetTempPath(), "devtools-missing-" + Guid.NewGuid().ToString("N")) }), definitions, settings, null);
+        manager = Manager();
+        definitions.Scan(root);
+    }
+
+    public void Dispose()
+    {
+        Directory.Delete(root, true);
+    }
+
+    private void AddVersion(string version)
+    {
+        Directory.CreateDirectory(Path.Combine(root, "node", version));
+    }
+
+    // Every command scans once, like a new devtools process.
+    private ToolManager Manager()
+    {
+        return new ToolManager(Options.Create(new Settings { RootPath = root }), definitions, settings, null);
+    }
+
+    private string Node(string version)
+    {
+        return Path.Combine(root, "node", version);
     }
 
     [Theory]
@@ -40,14 +67,6 @@ public class MetaVersionTests
     {
         Assert.Null(definitions.GetVersion("node", "1.0.0"));
         Assert.Null(definitions.GetVersion("ghost", "latest"));
-    }
-
-    [Fact]
-    public void GetVersion_ExactVersionWinsOverMetaVersion()
-    {
-        var special = new ToolDefinitionProvider(TestTools.Storage(("x", new[] { "1.0.0", "latest", "2.0.0" })));
-
-        Assert.Equal("latest", special.GetVersion("x", "latest").Manifest.Version);
     }
 
     [Fact]
@@ -90,20 +109,20 @@ public class MetaVersionTests
     public void Env_FollowsNewVersionWhenCacheChanges()
     {
         TestTools.CaptureConsole(() => manager.Select("node", "latest"));
-        Assert.Contains(@"C:\Tools\node\24.11.1", TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
+        Assert.Contains(Node("24.11.1"), TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
 
-        storage.Load<ScanResult>(TestTools.CacheFile).Apps["node"].Versions.Add(TestTools.Definition("node", "25.0.0"));
+        AddVersion("25.0.0");
 
-        Assert.Contains(@"C:\Tools\node\25.0.0", TestTools.CaptureConsole(() => manager.GetEnv(Shell.Bash)));
+        Assert.Contains(Node("25.0.0"), TestTools.CaptureConsole(() => Manager().GetEnv(Shell.Bash)));
     }
 
     [Fact]
     public void List_ShowsResolvedVersionAndSummarizesManyVersions()
     {
         TestTools.CaptureConsole(() => manager.Select("node", "oldest"));
-        storage.Load<ScanResult>(TestTools.CacheFile).Apps["node"].Versions.Add(TestTools.Definition("node", "25.0.0"));
+        AddVersion("25.0.0");
 
-        var row = TestTools.CaptureConsole(() => manager.List(false)).Split('\n').Single(i => i.StartsWith("node "));
+        var row = TestTools.CaptureConsole(() => Manager().List(false)).Split('\n').Single(i => i.StartsWith("node "));
 
         Assert.Equal(new[] { "node", "oldest (8.9.3)", "8.9.3 - 25.0.0 (4 versions)", "local" }, row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
@@ -125,7 +144,7 @@ public class MetaVersionTests
 
         Assert.Contains("versions   24.11.1, 12.18.1, 8.9.3", output);
         Assert.Contains("selected   latest (24.11.1)", output);
-        Assert.Contains(@"path       C:\Tools\node\24.11.1", output);
+        Assert.Contains($"path       {Node("24.11.1")}", output);
     }
 
     [Fact]

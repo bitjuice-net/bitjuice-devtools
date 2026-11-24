@@ -73,28 +73,30 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Versioned_ThrowsOnSameVersionInTwoDirectoriesAndKeepsCache()
+    public void Versioned_SkipsAnApplicationWithTheSameVersionInTwoDirectories()
     {
         Manifest("mingw", """{ "name": "mingw" }""");
         Manifest("mingw-legacy", """{ "name": "mingw" }""");
+        Manifest("go", """{ "name": "go" }""");
         Dirs("mingw/1.0.0", "mingw-legacy/1.0.0");
 
-        var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
+        var error = TestTools.CaptureError(() => definitions.Scan(root));
 
-        Assert.Contains(Path.Combine(root, "mingw", "1.0.0"), error.Message);
-        Assert.Contains(Path.Combine(root, "mingw-legacy", "1.0.0"), error.Message);
-        Assert.Empty(definitions.GetNames());
+        Assert.Contains(Path.Combine(root, "mingw", "1.0.0"), error);
+        Assert.Contains(Path.Combine(root, "mingw-legacy", "1.0.0"), error);
+        Assert.Equal(new[] { "go" }, definitions.GetNames());
     }
 
     [Fact]
-    public void Versioned_ThrowsOnTwoPartAndThreePartNamesOfOneVersion()
+    public void Versioned_SkipsTwoPartAndThreePartNamesOfOneVersion()
     {
         Manifest("java", """{ "name": "java" }""");
         Dirs("java/1.2", "java/1.2.0");
 
-        var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
+        var error = TestTools.CaptureError(() => definitions.Scan(root));
 
-        Assert.Contains(Path.Combine(root, "java", "1.2"), error.Message);
+        Assert.Contains(Path.Combine(root, "java", "1.2"), error);
+        Assert.Empty(definitions.GetNames());
     }
 
     [Fact]
@@ -133,31 +135,31 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Flat_ThrowsOnTwoDirectoriesWithTheSameName()
+    public void Flat_SkipsTwoDirectoriesWithTheSameName()
     {
         Manifest("a", """{ "name": "x", "flat": true }""");
         Manifest("b", """{ "name": "x", "flat": true }""");
 
-        var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
+        var error = TestTools.CaptureError(() => definitions.Scan(root));
 
-        Assert.Contains(Path.Combine(root, "a"), error.Message);
-        Assert.Contains(Path.Combine(root, "b"), error.Message);
+        Assert.Contains(Path.Combine(root, "a"), error);
+        Assert.Contains(Path.Combine(root, "b"), error);
+        Assert.Empty(definitions.GetNames());
     }
 
     [Theory]
     [InlineData("""{ "name": "x", "version": "default" }""")]
     [InlineData("""{ "name": "x", "version": "%DIRNAME%" }""")]
     [InlineData("""{ "name": "x", "version": "1.0.0" }""")]
-    public void VersionInManifest_ThrowsAndKeepsCache(string content)
+    public void VersionInManifest_SkipsOnlyThatApplication(string content)
     {
         Manifest("good", """{ "name": "good", "flat": true }""");
-        definitions.Scan(root);
         Manifest("x", content);
 
-        var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
+        var error = TestTools.CaptureError(() => definitions.Scan(root));
 
-        Assert.Contains(Path.Combine(root, "x"), error.Message);
-        Assert.Contains("remove it", error.Message);
+        Assert.Contains(Path.Combine(root, "x"), error);
+        Assert.Contains("remove it", error);
         Assert.Equal(new[] { "good" }, definitions.GetNames());
     }
 
@@ -233,13 +235,14 @@ public sealed class ScanTests : IDisposable
     [Theory]
     [InlineData("""{ "version": "1.0.0" }""")]
     [InlineData("""{ "flat": true }""")]
-    public void InvalidManifest_ThrowsWithItsDirectory(string content)
+    public void InvalidManifest_IsSkippedWithItsDirectory(string content)
     {
         Manifest("x", content);
 
-        var error = Assert.Throws<InvalidOperationException>(() => definitions.Scan(root));
+        var error = TestTools.CaptureError(() => definitions.Scan(root));
 
-        Assert.Contains(Path.Combine(root, "x"), error.Message);
+        Assert.Contains(Path.Combine(root, "x"), error);
+        Assert.Empty(definitions.GetNames());
     }
 
     [Fact]
@@ -265,23 +268,20 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void List_ShowsVersionsAddedByHandOnlyAfterAScan()
+    public void List_ShowsVersionsAddedByHandRightAway()
     {
         Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         Dirs("java/1.0.0");
-        definitions.Scan(root);
+        TestTools.CaptureConsole(() => Manager().List(false));
         Dirs("java/2.0.0");
 
-        var before = TestTools.CaptureConsole(() => Manager().List(false)).Split('\n').Single(i => i.StartsWith("java "));
-        Manager().Scan();
-        var after = TestTools.CaptureConsole(() => Manager().List(false)).Split('\n').Single(i => i.StartsWith("java "));
+        var row = TestTools.CaptureConsole(() => Manager().List(false)).Split('\n').Single(i => i.StartsWith("java "));
 
-        Assert.DoesNotContain("2.0.0", before);
-        Assert.Contains("1.0.0, 2.0.0", after);
+        Assert.Contains("1.0.0, 2.0.0", row);
     }
 
     [Fact]
-    public void Select_FindsAVersionAddedByHandWithOneScan()
+    public void Select_FindsAVersionAddedByHand()
     {
         Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         Dirs("java/1.0.0");
@@ -295,7 +295,7 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Show_FindsAnApplicationAddedByHandWithOneScan()
+    public void Show_FindsAnApplicationAddedByHand()
     {
         Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         definitions.Scan(root);
@@ -307,14 +307,12 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Env_ScansWhenTheCacheIsMissing()
+    public void Env_ScansTheToolsDirectory()
     {
         Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         Dirs("java/1.0.0");
 
-        Assert.False(definitions.IsScanned());
         Assert.Contains(Path.Combine(root, "java", "1.0.0"), TestTools.CaptureConsole(() => Manager().GetEnv(Shell.Bash)));
-        Assert.True(definitions.IsScanned());
     }
 
     [Fact]
@@ -341,7 +339,7 @@ public sealed class ScanTests : IDisposable
     }
 
     [Fact]
-    public void Env_DoesNotFailWhenTheScanFails()
+    public void Env_SkipsABrokenManifestAndKeepsTheOthers()
     {
         Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
         Dirs("java/1.0.0");
@@ -350,8 +348,8 @@ public sealed class ScanTests : IDisposable
         var output = "";
         var error = TestTools.CaptureError(() => output = TestTools.CaptureConsole(() => Manager().GetEnv(Shell.Bash)));
 
-        Assert.Contains("Could not scan", error);
-        Assert.Contains("export DT_PATH=", output);
+        Assert.Contains($"Skipped `{Path.Combine(root, "broken")}`", error);
+        Assert.Contains(Path.Combine(root, "java", "1.0.0"), output);
     }
 
     [Fact]

@@ -47,12 +47,9 @@ internal class Program
         }
     }
 
-    // Also after a failed command, what it saved before failing is loaded by the shells too.
+    // After every command, also a failed one, what it saved before failing is loaded by the shells too.
     private static void WriteEnvScript(IServiceProvider app)
     {
-        if (app.GetRequiredService<IStorage>() is not JsonStorage { StateChanged: true })
-            return;
-
         try
         {
             app.GetRequiredService<IToolManager>().WriteEnvScript();

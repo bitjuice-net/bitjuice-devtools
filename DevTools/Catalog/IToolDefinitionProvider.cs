@@ -15,7 +15,6 @@ public interface IToolDefinitionProvider
     // Directories of the tools directory without .app.
     List<string> GetUnmanaged();
     void Scan(string root);
-    bool IsScanned();
     string FindSourceDirectory(string root, string application);
     string FindDirectory(string root, string application);
     ToolManifest GetManifest(string root, string application);

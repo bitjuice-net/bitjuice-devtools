@@ -50,21 +50,21 @@ dt app reset java       replace .app with the one from its manifest repository
 dt app restore          install the applications from repositories that are missing, e.g. on a new computer
 dt app remove java 17.0.7
 dt app disable java     take an application off PATH without deleting it, `dt app enable java` puts it back
-dt sc                   scan the tools directory now
+dt app prune            remove settings of applications that are gone, ones from repositories stay for restore
 ```
 
-After adding or deleting versions by hand, or editing `.app`, run `dt sc`. A command that misses an application or
-a version, such as `dt sl java 26.0.1` right after copying it in, scans once on its own.
+Every command scans the tools directory, so versions added or deleted by hand and edited `.app` files count right away.
+A broken `.app` is skipped with a warning. After every command devtools writes `cache/env.cmd` or `cache/env.sh` again
+when PATH or the variables changed, so `dt` and new consoles load also changes made by hand.
 `install` and `update` use the versions found in the last hour, `--refresh` asks the version sources again.
 
 | Group | Commands |
 |---|---|
-| `app` | `list` (`ls`), `select` (`s`), `enable` (`e`), `disable` (`d`), `install`, `update`, `remove` (`rm`), `reset`, `restore` |
-| `cache` | `scan`, `prune` |
+| `app` | `list` (`ls`), `select` (`s`), `enable` (`e`), `disable` (`d`), `install`, `update`, `remove` (`rm`), `reset`, `restore`, `prune` |
 | `source` | `add`, `remove` (`rm`), `list` (`ls`) |
 | `shell` | `install`, `uninstall`, `env` |
 
-`ls`, `sl` and `sc` are shortcuts for `app list`, `app select` and `cache scan`. `devtools <command> -h` describes every command.
+`ls` and `sl` are shortcuts for `app list` and `app select`. `devtools <command> -h` describes every command.
 
 ## Manifests
 
@@ -76,8 +76,7 @@ Every directory of the tools directory is an application, `dt ls` shows where it
 
 `config/apps.json` keeps every application from a repository, so a backup of that one file is enough:
 `dt app restore` installs the applications that have no installed version, the selected version when it is an exact
-one, otherwise the newest. Applications made by hand are not restored. The tools directory alone is enough to rebuild
-`cache`.
+one, otherwise the newest. Applications made by hand are not restored.
 
 ```json
 {
@@ -158,9 +157,8 @@ Next to devtools, `config` keeps what you chose and `cache` what devtools can re
 | `config/settings.json` | settings, e.g. `rootPath` and `githubToken` |
 | `config/apps.json` | selected and disabled versions, the repository of every application from one |
 | `config/sources.json` | manifest repositories |
-| `cache/apps.json` | applications and directories without `.app` found in the tools directory |
 | `cache/versions/<application>.json` | versions found by the version source of the application, kept for an hour |
-| `cache/state` | changes on every save, `dt` reloads the console only when it changed |
+| `cache/state` | changes when `env.cmd` or `env.sh` changes, `dt` reloads the console only then |
 | `cache/env.cmd`, `cache/env.sh` | PATH and variables of the selected tools, run by new consoles and `dt` |
 
 Any file in `cache`, or the whole directory, may be deleted, the next command rebuilds it.

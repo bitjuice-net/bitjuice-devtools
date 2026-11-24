@@ -9,24 +9,6 @@ namespace DevTools.Tests;
 
 internal static class TestTools
 {
-    public const string CacheFile = "cache/apps.json";
-
-    public static ToolDefinition Definition(string name, string version)
-    {
-        return new ToolDefinition
-        {
-            Path = $@"C:\Tools\{name}\{version}",
-            Manifest = new ToolManifest { Name = name, Version = version, Paths = new List<string> { "%APPDIR%" } }
-        };
-    }
-
-    public static MemoryStorage Storage(params (string Name, string[] Versions)[] tools)
-    {
-        var storage = new MemoryStorage();
-        storage.Save(CacheFile, new ScanResult { Apps = new SortedDictionary<string, ScannedApp>(tools.ToDictionary(i => i.Name, i => new ScannedApp { Versions = i.Versions.Select(v => Definition(i.Name, v)).ToList() })) });
-        return storage;
-    }
-
     public static string CaptureConsole(Action action)
     {
         var original = Console.Out;

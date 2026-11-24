@@ -21,12 +21,12 @@ internal class MemoryStorage : IStorage
         return files.ContainsKey(Key(fileName));
     }
 
-    public void Save<T>(string fileName, T obj, bool changesState = true) where T : new()
+    public void Save<T>(string fileName, T obj) where T : new()
     {
         files[Key(fileName)] = obj;
     }
 
-    // config/apps.json and cache/apps.json are different files, so the directory is part of the key.
+    // Files of different directories can have the same name, so the directory is part of the key.
     private static string Key(string fileName)
     {
         return Path.GetFileName(Path.GetDirectoryName(fileName)) + "/" + Path.GetFileName(fileName);

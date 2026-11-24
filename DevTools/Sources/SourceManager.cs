@@ -334,7 +334,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
 
     private void Save()
     {
-        storage.Save(FileName, State, changesState: false);
+        storage.Save(FileName, State);
     }
 
     [GeneratedRegex(@"^[\w.-]+/[\w.-]+$")]

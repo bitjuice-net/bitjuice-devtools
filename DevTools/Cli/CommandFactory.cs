@@ -14,13 +14,11 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         var cmd = new RootCommand("Installs development tools and switches between their versions.");
 
         cmd.Subcommands.Add(BuildAppCommand());
-        cmd.Subcommands.Add(BuildCacheCommand());
         cmd.Subcommands.Add(BuildSourceCommand());
         cmd.Subcommands.Add(BuildShellCommand());
 
         cmd.Subcommands.Add(Shortcut("ls", "app list", BuildListCommand()));
         cmd.Subcommands.Add(Shortcut("sl", "app select", BuildSelectCommand()));
-        cmd.Subcommands.Add(Shortcut("sc", "cache scan", BuildScanCommand()));
 
         return cmd;
     }
@@ -48,13 +46,6 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
         cmd.Subcommands.Add(BuildRemoveCommand());
         cmd.Subcommands.Add(BuildResetCommand());
         cmd.Subcommands.Add(BuildRestoreCommand());
-        return cmd;
-    }
-
-    private Command BuildCacheCommand()
-    {
-        var cmd = new Command("cache", "The list of applications found in the tools directory.");
-        cmd.Subcommands.Add(BuildScanCommand());
         cmd.Subcommands.Add(BuildPruneCommand());
         return cmd;
     }
@@ -120,16 +111,9 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
             : Enum.Parse<Shell>(value, ignoreCase: true);
     }
 
-    private Command BuildScanCommand()
-    {
-        var cmd = new Command("scan", "Find applications and versions in the tools directory.");
-        cmd.SetAction(_ => manager.Scan());
-        return cmd;
-    }
-
     private Command BuildPruneCommand()
     {
-        var cmd = new Command("prune", "Scan again and remove settings of applications and versions that no longer exist.");
+        var cmd = new Command("prune", "Remove settings of applications that no longer exist, applications from repositories stay for `app restore`.");
         cmd.SetAction(_ => manager.Prune());
         return cmd;
     }

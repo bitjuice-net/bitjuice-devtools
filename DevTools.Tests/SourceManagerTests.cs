@@ -351,17 +351,4 @@ public sealed class SourceManagerTests : IDisposable
         Assert.Matches(@"(?m)^java\s*$", one);
     }
 
-    [Fact]
-    public void JsonStorage_SaveWritesANewState()
-    {
-        var state = Path.Combine(temp, "cache", "state");
-        var storage = new JsonStorage(state);
-        storage.Save(Path.Combine(temp, "config", "apps.json"), new Dictionary<string, string>());
-        var first = JsonStorage.ReadState(state);
-        System.Threading.Thread.Sleep(1);
-        storage.Save(Path.Combine(temp, "config", "apps.json"), new Dictionary<string, string>());
-
-        Assert.NotEqual("", first);
-        Assert.NotEqual(first, JsonStorage.ReadState(state));
-    }
 }

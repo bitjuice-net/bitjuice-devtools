@@ -4,7 +4,6 @@ public interface IToolManager
 {
     void GetEnv(Shell shell);
     void WriteEnvScript();
-    void Scan();
     void Prune();
     void Install(string application, string version, bool refresh = false, string source = null);
     void Update(string application, bool refresh = false);
