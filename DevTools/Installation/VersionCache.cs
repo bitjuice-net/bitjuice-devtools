@@ -1,42 +1,40 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.IO;
 using DevTools.Infrastructure;
 using DevTools.Installation.Models;
 
 namespace DevTools.Installation;
 
-// Versions found by a version source, kept for an hour in cache/versions.json.
+// Versions found by a version source, kept for an hour in cache/versions/<application>.json.
 // Updating every application would otherwise ask GitHub again each time and soon hit its rate limit.
+// One file per application, so saving the versions of one does not rewrite the others.
 public class VersionCache(IStorage storage, TimeProvider time = null)
 {
     public static readonly TimeSpan Duration = TimeSpan.FromHours(1);
 
-    private static readonly string FileName = PathUtils.GetCachePath("versions.json");
-
     private readonly TimeProvider time = time ?? TimeProvider.System;
 
-    private Dictionary<string, CachedVersions> entries;
-    private Dictionary<string, CachedVersions> Entries => entries ??= storage.Load<Dictionary<string, CachedVersions>>(FileName);
+    public static string FileName(string application)
+    {
+        return PathUtils.GetCachePath(Path.Combine("versions", application + ".json"));
+    }
 
     public static string Key(VersionSource source)
     {
         return new[] { source.Type, source.Repo, source.Tag, source.Url, source.Pattern }.Join("|");
     }
 
-    // The cached versions, null when there are none or they are older than an hour.
-    public List<RemoteVersion> Get(string key)
+    // The cached versions, null when there are none, they are older than an hour or .app now has another source.
+    public List<RemoteVersion> Get(string application, string key)
     {
-        return Entries.TryGetValue(key, out var entry) && !IsExpired(entry) ? entry.Versions : null;
+        var entry = storage.Load<CachedVersions>(FileName(application));
+        return entry.Key == key && !IsExpired(entry) ? entry.Versions : null;
     }
 
-    public void Set(string key, List<RemoteVersion> versions)
+    public void Set(string application, string key, List<RemoteVersion> versions)
     {
-        foreach (var expired in Entries.Where(i => IsExpired(i.Value)).Select(i => i.Key).ToList())
-            Entries.Remove(expired);
-
-        Entries[key] = new CachedVersions { Time = time.GetUtcNow(), Versions = versions };
-        storage.Save(FileName, Entries, changesState: false);
+        storage.Save(FileName(application), new CachedVersions { Key = key, Time = time.GetUtcNow(), Versions = versions }, changesState: false);
     }
 
     private bool IsExpired(CachedVersions entry)

@@ -80,7 +80,7 @@ public static class ShellInstaller
         var file = ShellScripts.RcFile(shell, Environment.GetEnvironmentVariable);
         var line = ShellScripts.RcLine(shell, executable);
         var content = File.Exists(file) ? File.ReadAllText(file) : "";
-        var cleaned = ShellScripts.RemoveFromRc(content, shell);
+        var cleaned = ShellScripts.RemoveFromRc(content);
 
         if (cleaned != content && ShellScripts.AppendToRc(cleaned, line) == content)
         {
@@ -88,7 +88,7 @@ public static class ShellInstaller
             return;
         }
 
-        // Lines of earlier versions or another devtools location are replaced, so the shell loads devtools once.
+        // A line of another devtools location is replaced, so the shell loads devtools once.
         File.WriteAllText(file, ShellScripts.AppendToRc(cleaned, line));
         Console.WriteLine($"Added devtools to {file}, open a new shell or run: {line}");
     }
@@ -97,7 +97,7 @@ public static class ShellInstaller
     {
         var file = ShellScripts.RcFile(shell, Environment.GetEnvironmentVariable);
         var content = File.Exists(file) ? File.ReadAllText(file) : "";
-        var cleaned = ShellScripts.RemoveFromRc(content, shell);
+        var cleaned = ShellScripts.RemoveFromRc(content);
 
         if (cleaned == content)
         {

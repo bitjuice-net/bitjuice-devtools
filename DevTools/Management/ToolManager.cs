@@ -28,16 +28,13 @@ public class ToolManager(
     // Created on first use, only install, update and remove download anything.
     private IToolInstaller toolInstaller => installer.Value;
 
-    // Writes the script of the shell and prints its commands, for hooks of earlier versions.
+    // Writes the script of the shell, init.cmd and init.sh run it when it is missing or outdated, and prints it.
     public void GetEnv(Shell shell)
     {
         EnsureScanned();
 
         var (paths, envs) = BuildEnv();
-        var state = JsonStorage.ReadState(PathUtils.StateFile);
-        WriteEnvScript(shell, paths, envs, state);
-
-        Console.WriteLine(ShellScripts.Env(shell, paths, envs, Environment.GetEnvironmentVariable, state));
+        Console.Write(WriteEnvScript(shell, paths, envs, JsonStorage.ReadState(PathUtils.StateFile)));
     }
 
     // After every change, so a console loads PATH and variables without starting devtools.
@@ -47,7 +44,7 @@ public class ToolManager(
         WriteEnvScript(OperatingSystem.IsWindows() ? Shell.Cmd : Shell.Bash, paths, envs, JsonStorage.ReadState(PathUtils.StateFile));
     }
 
-    private static void WriteEnvScript(Shell shell, List<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, string state)
+    private static string WriteEnvScript(Shell shell, List<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, string state)
     {
         var fileName = PathUtils.GetCachePath(ShellScripts.ScriptFileName(shell));
         var script = ShellScripts.Script(shell, paths, envs, state);
@@ -60,6 +57,7 @@ public class ToolManager(
         var temporary = fileName + ".tmp";
         File.WriteAllText(temporary, script, encoding);
         File.Move(temporary, fileName, overwrite: true);
+        return script;
     }
 
     private (List<string> Paths, IReadOnlyList<KeyValuePair<string, string>> Envs) BuildEnv()

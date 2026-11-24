@@ -34,12 +34,14 @@ public class ToolInstaller(IStorage storage, IVersionSource versionSource, IDown
             Pattern = ExpandPlatform(versions.Pattern, source)
         };
 
+        // The directory of an application is named after it.
+        var application = Path.GetFileName(Path.TrimEndingDirectorySeparator(directory));
         var key = VersionCache.Key(expanded);
-        if (cache != null && !refresh && cache.Get(key) is { } cached)
+        if (cache != null && !refresh && cache.Get(application, key) is { } cached)
             return cached;
 
         var found = await versionSource.GetVersionsAsync(expanded);
-        cache?.Set(key, found);
+        cache?.Set(application, key, found);
         return found;
     }
 

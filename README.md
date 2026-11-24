@@ -62,7 +62,7 @@ a version, such as `dt sl java 26.0.1` right after copying it in, scans once on 
 | `app` | `list` (`ls`), `select` (`s`), `enable` (`e`), `disable` (`d`), `install`, `update`, `remove` (`rm`), `reset`, `restore` |
 | `cache` | `scan`, `prune` |
 | `source` | `add`, `remove` (`rm`), `list` (`ls`) |
-| `shell` | `install`, `uninstall`, `hook`, `env` |
+| `shell` | `install`, `uninstall`, `env` |
 
 `ls`, `sl` and `sc` are shortcuts for `app list`, `app select` and `cache scan`. `devtools <command> -h` describes every command.
 
@@ -107,7 +107,8 @@ one, otherwise the newest. Applications made by hand are not restored. The tools
 `install`:
 
 - `versions.type`: `github-releases` and `github-tags` (with `repo` and an optional `tag` pattern), or `web-page`
-  (with `url` and a `pattern` that finds the download links).
+  (with `url` and a `pattern` that finds the download links). A number written without dots, such as `hwi_860.zip`,
+  is captured in parts, `hwi_(?<version>\d)(?<version>\d\d)\.zip`, and becomes 8.60.
 - Steps: `download` (an `asset` of the release or a `url`, optionally `to`), `extract` (zip, tar.gz, tgz, 7z,
   `stripRoot` drops a single root directory) and `move` (`from`, `to`).
 - `{version}`, `{tag}`, `{os}` (`windows`, `linux`, `macos`) and `{arch}` (`x64`, `arm64`, ...) are replaced in steps
@@ -158,7 +159,7 @@ Next to devtools, `config` keeps what you chose and `cache` what devtools can re
 | `config/apps.json` | selected and disabled versions, the repository of every application from one |
 | `config/sources.json` | manifest repositories |
 | `cache/apps.json` | applications and directories without `.app` found in the tools directory |
-| `cache/versions.json` | versions found by the version sources, kept for an hour |
+| `cache/versions/<application>.json` | versions found by the version source of the application, kept for an hour |
 | `cache/state` | changes on every save, `dt` reloads the console only when it changed |
 | `cache/env.cmd`, `cache/env.sh` | PATH and variables of the selected tools, run by new consoles and `dt` |
 

@@ -91,9 +91,7 @@ internal class CommandFactory(IToolManager manager, Lazy<ISourceManager> sources
             shell => ShellInstaller.Install(shell, Environment.ProcessPath)));
         cmd.Subcommands.Add(ShellSubcommand("uninstall", "Stop loading devtools in new shells, other AutoRun commands and ~/.bashrc or ~/.zshrc lines stay.",
             ShellInstaller.Uninstall));
-        cmd.Subcommands.Add(ShellSubcommand("hook", "Get the command that runs init.cmd or init.sh, which load the selected tools and define `dt`, `shell install` puts it in AutoRun or the rc file.",
-            shell => Console.WriteLine(ShellScripts.Hook(shell, Environment.ProcessPath))));
-        cmd.Subcommands.Add(ShellSubcommand("env", "Get commands that set PATH and environment variables of the selected tools, `dt` runs them after every command.",
+        cmd.Subcommands.Add(ShellSubcommand("env", "Write and print cache/env.cmd or cache/env.sh, which set PATH and the variables of the selected tools.",
             manager.GetEnv));
 
         return cmd;

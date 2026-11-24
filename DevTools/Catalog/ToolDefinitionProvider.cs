@@ -19,7 +19,7 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
 
     private ScanResult scanned;
     private ScanResult Scanned => scanned ??= storage.Load<ScanResult>(FileName);
-    private SortedDictionary<string, ScannedApp> Tools => Scanned.Apps ?? new SortedDictionary<string, ScannedApp>();
+    private SortedDictionary<string, ScannedApp> Tools => Scanned.Apps;
 
     public List<string> GetNames()
     {
@@ -101,10 +101,10 @@ public class ToolDefinitionProvider(IStorage storage) : IToolDefinitionProvider
             .Join("\n");
     }
 
-    // Changes made by hand are found by `sc`, a deleted cache or one of an earlier version by the next command.
+    // Changes made by hand are found by `sc`, a deleted cache by the next command.
     public bool IsScanned()
     {
-        return storage.Exists(FileName) && Scanned.Apps != null;
+        return storage.Exists(FileName);
     }
 
     public string FindSourceDirectory(string root, string application)

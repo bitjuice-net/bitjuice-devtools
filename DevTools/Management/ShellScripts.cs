@@ -9,7 +9,7 @@ namespace DevTools.Management;
 
 // Every shell works the same way: after every change devtools writes cache/env.cmd or cache/env.sh, which sets PATH
 // and variables, and init.cmd or init.sh, which new consoles run, loads it without starting devtools. `shell env` writes
-// it again when it is missing and prints the same commands for hooks of earlier versions.
+// it again when it is missing or outdated.
 public static partial class ShellScripts
 {
     public const string BasePathVariable = "DT_BASEPATH";
@@ -35,39 +35,9 @@ public static partial class ShellScripts
         };
     }
 
-    // The PATH from before devtools is kept in DT_BASEPATH, so every reload builds PATH from scratch.
-    // Selected tools go first, so they win over the system ones.
-    public static string Env(Shell shell, IEnumerable<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, Func<string, string> getEnv, string state = "")
-    {
-        var separator = shell == Shell.Cmd ? ';' : ':';
-        var basePath = new[] { getEnv(BasePathVariable), getEnv("PATH") }.FirstOrDefault(i => !string.IsNullOrEmpty(i)) ?? "";
-        var toolPath = paths.Where(i => !string.IsNullOrEmpty(i)).Join(separator);
-
-        foreach (var (key, _) in envs.Where(i => !IsValid(shell, i)))
-            Console.Error.WriteLine($"Skipped environment variable `{key}`: its name or value cannot be set in {shell}");
-
-        var valid = envs.Where(i => IsValid(shell, i)).ToList();
-        var comparer = shell == Shell.Cmd ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var names = valid.Select(i => i.Key).Distinct(comparer).ToList();
-        var stale = (getEnv(EnvsVariable) ?? "")
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Where(i => IsName(shell, i) && !names.Contains(i, comparer))
-            .Distinct(comparer);
-
-        var lines = new List<string> { Set(shell, BasePathVariable, basePath) };
-        lines.AddRange(stale.Select(i => Unset(shell, i)));
-        lines.AddRange(valid.Select(i => Set(shell, i.Key, i.Value)));
-        lines.Add(Set(shell, EnvsVariable, names.Join(' ')));
-        lines.Add(Set(shell, "DT_PATH", toolPath));
-        lines.Add(Set(shell, "PATH", new[] { toolPath, basePath }.Where(i => i.Length > 0).Join(separator)));
-        lines.Add(Set(shell, StateVariable, state));
-        lines.Add(Set(shell, InitializedVariable, "1"));
-
-        return lines.Join(shell == Shell.Cmd ? "\r\n" : "\n");
-    }
-
-    // The script of Env for the file in cache. What Env reads from the environment is read by the shell instead, so one file
-    // serves every console: PATH from before devtools and the variables the console set before, which are removed first.
+    // The script for the file in cache. PATH from before devtools, kept in DT_BASEPATH, and the variables the console set
+    // before, which are removed first, are read by the shell, so one file serves every console. Selected tools go first
+    // in PATH, so they win over the system ones.
     public static string Script(Shell shell, IEnumerable<string> paths, IReadOnlyList<KeyValuePair<string, string>> envs, string state)
     {
         var separator = shell == Shell.Cmd ? ';' : ':';
@@ -137,7 +107,7 @@ public static partial class ShellScripts
     }
 
     // cmd: the AutoRun command. Consoles started by one that loaded devtools, such as `cmd /c` of scripts, skip it.
-    // bash and zsh: the line of ~/.bashrc or ~/.zshrc. `shell hook` prints it too, for the `eval` lines of earlier versions.
+    // bash and zsh: the line of ~/.bashrc or ~/.zshrc.
     public static string Hook(Shell shell, string executable)
     {
         var file = InitFile(shell, executable);
@@ -170,7 +140,7 @@ public static partial class ShellScripts
         return others.Length == 0 ? command : $"{others} & {command}";
     }
 
-    // What is left of AutoRun without devtools, also without the dt-setup.cmd of older versions.
+    // What is left of AutoRun without devtools.
     public static string RemoveFromAutoRun(string existing)
     {
         if (string.IsNullOrWhiteSpace(existing))
@@ -178,38 +148,16 @@ public static partial class ShellScripts
 
         var start = existing.IndexOf($"if not defined {InitializedVariable}", StringComparison.OrdinalIgnoreCase);
         var others = start >= 0 ? existing[..start] : existing;
-
-        if (others.Contains("dt-setup.cmd", StringComparison.OrdinalIgnoreCase))
-            others = others.Split('&').Where(i => !i.Contains("dt-setup.cmd", StringComparison.OrdinalIgnoreCase)).Select(i => i.Trim()).Join(" & ");
-
         return others.Trim().Trim('&').Trim();
     }
 
-    // Removes the lines added by `shell install`, including ones that point to another devtools location
-    // and the `eval` lines and `# devtools` comments of earlier versions.
-    public static string RemoveFromRc(string content, Shell shell)
+    // Removes the line added by `shell install`, also one that points to another devtools location.
+    public static string RemoveFromRc(string content)
     {
         var lineEnding = content.Contains("\r\n") ? "\r\n" : "\n";
-        var rcLine = new Regex($"""^\s*(eval "\$\(.*devtools.*(hook|init) {Name(shell)}\)"|\. '[^']*devtools[^']*[/\\]init\.sh')\s*$""");
-        var kept = new List<string>();
-
-        foreach (var line in content.Split(lineEnding))
-        {
-            if (line.Trim() == RcMarker)
-            {
-                if (kept.Count > 0 && kept[^1].Trim().Length == 0)
-                    kept.RemoveAt(kept.Count - 1);
-                continue;
-            }
-
-            if (!rcLine.IsMatch(line))
-                kept.Add(line);
-        }
-
-        return kept.Join(lineEnding);
+        var rcLine = RcLinePattern();
+        return content.Split(lineEnding).Where(i => !rcLine.IsMatch(i)).Join(lineEnding);
     }
-
-    public const string RcMarker = "# devtools";
 
     public static string AppendToRc(string content, string line)
     {
@@ -218,19 +166,9 @@ public static partial class ShellScripts
         return content + separator + line + lineEnding;
     }
 
-    private static string Name(Shell shell)
-    {
-        return shell.ToString().ToLowerInvariant();
-    }
-
     private static string Set(Shell shell, string key, string value)
     {
         return shell == Shell.Cmd ? $"set \"{key}={value}\"" : $"export {key}={Quote(value)}";
-    }
-
-    private static string Unset(Shell shell, string key)
-    {
-        return shell == Shell.Cmd ? $"set \"{key}=\"" : $"unset {key}";
     }
 
     private static string Batch(string value)
@@ -258,6 +196,9 @@ public static partial class ShellScripts
 
     [GeneratedRegex("""^[^\s="%!^&|<>]+$""")]
     private static partial Regex CmdName();
+
+    [GeneratedRegex(@"^\s*\. '[^']*devtools[^']*[/\\]init\.sh'\s*$")]
+    private static partial Regex RcLinePattern();
 
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]*$")]
     private static partial Regex PosixName();

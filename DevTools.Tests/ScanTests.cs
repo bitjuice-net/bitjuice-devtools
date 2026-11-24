@@ -409,16 +409,4 @@ public sealed class ScanTests : IDisposable
         Assert.Contains("`app restore`", TestTools.CaptureConsole(() => manager.Show("age")));
         Assert.Equal("owner/apps", tools.GetSettings("age").Source);
     }
-
-    [Fact]
-    public void CacheOfAnEarlierVersion_IsScannedAgain()
-    {
-        Manifest("java", """{ "name": "java", "paths": ["%APPDIR%"] }""");
-        Dirs("java/1.0.0");
-        // An earlier cache was a dictionary of versions, read as a result without apps.
-        storage.Save(TestTools.CacheFile, new ScanResult());
-
-        Assert.False(definitions.IsScanned());
-        Assert.Contains(Path.Combine(root, "java", "1.0.0"), TestTools.CaptureConsole(() => Manager().GetEnv(Shell.Bash)));
-    }
 }

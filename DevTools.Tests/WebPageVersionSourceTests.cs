@@ -79,6 +79,21 @@ public class WebPageVersionSourceTests
     }
 
     [Fact]
+    public async Task VersionCapturedInPartsIsJoinedWithDots()
+    {
+        var page = """
+                   <a href="https://cdn.test/files/hwi_860.zip">x</a>
+                   <a href="https://cdn.test/files/hwi_858.zip">x</a>
+                   """;
+
+        var versions = await Source(page).GetVersionsAsync(Definition(@"https://cdn\.test/files/hwi_(?<version>\d)(?<version>\d\d)\.zip"));
+
+        Assert.Equal(new[] { "8.60.0", "8.58.0" }, versions.Select(i => i.Version));
+        Assert.Equal("860", versions[0].SourceVersion);
+        Assert.Equal("hwi_860.zip", versions[0].Assets[0].Name);
+    }
+
+    [Fact]
     public async Task KeepsAbsoluteLink()
     {
         var page = """<a href="https://cdn.test/1.2.0/tool.zip">x</a>""";

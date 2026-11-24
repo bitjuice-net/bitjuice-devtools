@@ -54,10 +54,13 @@ public class WebPageVersionSource(HttpClient client) : IVersionSource
 
     private static RemoteVersion CreateVersion(Match match, Uri page)
     {
-        var version = match.Groups["version"].Value;
+        // A file name can write a number without dots, such as hwi_860.zip for 8.60. The version group is then captured
+        // once for every part, (?<version>\d)(?<version>\d\d), and the parts are joined with dots.
+        var captures = match.Groups["version"].Captures.Select(i => i.Value).ToList();
+        var version = captures.Join("");
 
         // A page can write a number like 2.24-103, which names version 2.24.103.
-        var number = version.Replace('-', '.');
+        var number = captures.Join(".").Replace('-', '.');
 
         if (!Version.TryParse(number, out _) || !Uri.TryCreate(page, match.Value, out var link))
             return null;
