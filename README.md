@@ -24,12 +24,13 @@ D:\Tools
    ```
    devtools shell install
    ```
-   On Windows this adds a command to the cmd AutoRun, elsewhere a line to `~/.bashrc` or `~/.zshrc`.
-   `devtools shell uninstall` removes it again.
+   On Windows this adds a command that calls `init.cmd` to the cmd AutoRun, elsewhere a line that sources `init.sh`
+   to `~/.bashrc` or `~/.zshrc`, e.g. `. '/opt/tools/devtools/init.sh'`. `devtools shell uninstall` removes it again.
+   Both files lie next to devtools and can also be run by hand, e.g. in a console started with `cmd /d`.
 3. Open a new console. It has the `dt` command, which runs devtools and applies the changes to the console right away.
 
 After every change devtools writes `cache/env.cmd` (Windows) or `cache/env.sh` with PATH and the variables of the selected
-tools. A new console and `dt` only run that script, devtools itself is not started for it. `%NAME%` in a manifest is
+tools. A new console (through `init.cmd` or `init.sh`) and `dt` only run that script, devtools itself is not started for it. `%NAME%` in a manifest is
 replaced when the script is written, with the variables devtools had then.
 
 The tools directory is the parent of the devtools directory. Another one can be set in `config/settings.json`,

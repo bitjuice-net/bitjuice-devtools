@@ -29,9 +29,15 @@
     </None>
   </ItemGroup>
 
-  <!-- cmd.exe has no functions, so `dt` is a script, other shells use `devtools shell hook bash|zsh`. -->
+  <!-- What new consoles run: init.cmd from AutoRun, init.sh from ~/.bashrc or ~/.zshrc. cmd.exe has no functions,
+       so `dt` is a script there, init.sh defines it as a function. -->
   <ItemGroup Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">
-    <None Update="dt.cmd">
+    <None Update="dt.cmd;init.cmd">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == '' Or !$(RuntimeIdentifier.StartsWith('win'))">
+    <None Update="init.sh">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

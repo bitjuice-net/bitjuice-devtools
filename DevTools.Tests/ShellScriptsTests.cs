@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using DevTools.Management;
 using Xunit;
 
@@ -134,32 +135,29 @@ public class ShellScriptsTests
     }
 
     [Theory]
-    [InlineData(Shell.Bash, "bash")]
-    [InlineData(Shell.Zsh, "zsh")]
-    public void Hook_PosixShellsDefineDtAndReload(Shell shell, string name)
+    [InlineData(Shell.Bash)]
+    [InlineData(Shell.Zsh)]
+    public void Hook_PosixShellsSourceInitSh(Shell shell)
     {
-        var script = ShellScripts.Hook(shell, "/opt/dev tools/devtools");
-        var file = ShellScripts.ScriptFile(shell, "/opt/dev tools/devtools");
+        var line = ShellScripts.Hook(shell, "/opt/dev tools/devtools");
 
-        Assert.EndsWith(Path.Combine("cache", "env.sh"), file);
-        Assert.Contains($". '{file}'", script);
-        Assert.Contains($"'/opt/dev tools/devtools' shell env {name} >/dev/null && . '{file}'", script);
-        Assert.Contains("dt() {", script);
-        Assert.DoesNotContain("\r", script);
+        // The path comes from the system the tests run on, Windows turns the slashes around.
+        Assert.Equal($". '{ShellScripts.InitFile(shell, "/opt/dev tools/devtools")}'", line);
+        Assert.Equal(line, ShellScripts.RcLine(shell, "/opt/dev tools/devtools"));
+        if (!OperatingSystem.IsWindows())
+            Assert.Equal(". '/opt/dev tools/init.sh'", line);
     }
 
     [Fact]
-    public void Hook_CmdRunsTheScriptAndWritesItWhenItIsMissing()
+    public void Hook_CmdCallsInitCmdOnce()
     {
         const string exe = @"C:\Program Files\devtools\devtools.exe";
-        var command = ShellScripts.Hook(Shell.Cmd, exe);
 
-        // The path of the script comes from the system the tests run on, a Windows path has no directory on Linux.
-        var script = ShellScripts.ScriptFile(Shell.Cmd, exe);
-        Assert.Equal($"""if not defined DT_INITIALIZED (set "DT_INITIALIZED=1" & (if not exist "{script}" "{exe}" shell env cmd >nul) & call "{script}")""",
-            command);
+        // The path comes from the system the tests run on, a Windows path has no directory on Linux.
+        var file = ShellScripts.InitFile(Shell.Cmd, exe);
+        Assert.Equal($"if not defined DT_INITIALIZED call \"{file}\"", ShellScripts.Hook(Shell.Cmd, exe));
         if (OperatingSystem.IsWindows())
-            Assert.Equal(@"C:\Program Files\devtools\cache\env.cmd", script);
+            Assert.Equal(@"C:\Program Files\devtools\init.cmd", file);
     }
 
     [Theory]
@@ -198,6 +196,8 @@ public class ShellScriptsTests
     [InlineData(Shell.Bash, "a\r\neval \"$('/old place/devtools' init bash)\"\r\n", "a\r\n")]
     [InlineData(Shell.Zsh, "eval \"$('/opt/devtools/devtools' init bash)\"\n", "eval \"$('/opt/devtools/devtools' init bash)\"\n")]
     [InlineData(Shell.Bash, "eval \"$(starship init bash)\"\n", "eval \"$(starship init bash)\"\n")]
+    [InlineData(Shell.Zsh, "a\n. '/opt/devtools/init.sh'\nb\n", "a\nb\n")]
+    [InlineData(Shell.Bash, ". '/home/me/.local/init.sh'\n", ". '/home/me/.local/init.sh'\n")]
     public void RemoveFromRc_RemovesOnlyDevtoolsLines(Shell shell, string content, string expected)
     {
         Assert.Equal(expected, ShellScripts.RemoveFromRc(content, shell));
@@ -206,28 +206,20 @@ public class ShellScriptsTests
     [Fact]
     public void RemoveFromRc_UndoesInstall()
     {
-        var original = "alias ll='ls -l'\n";
-        var installed = original + $"\n{ShellScripts.RcMarker}\n{ShellScripts.RcLine(Shell.Bash, "/opt/devtools/devtools")}\n";
+        var original = "alias ll='ls -l'";
+        var installed = ShellScripts.AppendToRc(original, ShellScripts.RcLine(Shell.Bash, "/opt/devtools/devtools"));
 
-        Assert.Equal(original, ShellScripts.RemoveFromRc(installed, Shell.Bash));
-    }
-
-    [Fact]
-    public void RcLine_EvaluatesHook()
-    {
-        Assert.Equal("""eval "$('/opt/devtools' shell hook zsh)" """.TrimEnd(), ShellScripts.RcLine(Shell.Zsh, "/opt/devtools"));
+        Assert.Equal($"alias ll='ls -l'\n. '{ShellScripts.InitFile(Shell.Bash, "/opt/devtools/devtools")}'\n", installed);
+        Assert.Equal(original + "\n", ShellScripts.RemoveFromRc(installed, Shell.Bash));
     }
 
     [Theory]
-    [InlineData(Shell.Bash)]
-    [InlineData(Shell.Zsh)]
-    public void Hook_ReloadsOnlyWhenTheStateChanged(Shell shell)
+    [InlineData("", ". 'x'\n")]
+    [InlineData("a", "a\n. 'x'\n")]
+    [InlineData("a\r\n", "a\r\n. 'x'\r\n")]
+    public void AppendToRc_AddsOneLine(string content, string expected)
     {
-        var script = ShellScripts.Hook(shell, "/opt/devtools/devtools");
-
-        Assert.EndsWith(System.IO.Path.Combine("devtools", "cache", "state"), ShellScripts.StateFile("/opt/devtools/devtools"));
-        Assert.Contains($"IFS= read -r state < '{ShellScripts.StateFile("/opt/devtools/devtools")}'", script);
-        Assert.Contains("[ \"$state\" = \"${DT_STATE-}\" ] || _dt_reload", script);
+        Assert.Equal(expected, ShellScripts.AppendToRc(content, ". 'x'"));
     }
 
     [Fact]
@@ -298,6 +290,97 @@ public class ShellScriptsTests
             Assert.Equal(@"[D:\two;C:\base]", output[0]);
             Assert.Equal("[\"50% & (y)\"]", output[1]);
             Assert.Equal(@"[][][2][C:\base]", output[2]);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    // Runs init.cmd of the build output like AutoRun does, with an env.cmd of the current state.
+    [Fact]
+    public void InitCmd_LoadsEnvCmd()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var directory = Directory.CreateTempSubdirectory("devtools-init-").FullName;
+        try
+        {
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "init.cmd"), Path.Combine(directory, "init.cmd"));
+            Directory.CreateDirectory(Path.Combine(directory, "cache"));
+            File.WriteAllText(Path.Combine(directory, "cache", "state"), "7\r\n");
+            File.WriteAllText(Path.Combine(directory, "cache", "env.cmd"), ShellScripts.Script(Shell.Cmd, new[] { @"D:\one" },
+                new KeyValuePair<string, string>[] { new("DT_X", "x") }, "7"));
+            var test = Path.Combine(directory, "test.cmd");
+            File.WriteAllText(test, $"""
+                @echo off
+                set "DT_BASEPATH=" & set "DT_ENVS=" & set "DT_STATE=" & set "DT_INITIALIZED="
+                set "PATH=C:\base"
+                call "{directory}\init.cmd"
+                echo [%PATH%][%DT_X%][%DT_STATE%][%DT_INITIALIZED%][%DT_NEWSTATE%]
+                """.ReplaceLineEndings("\r\n"));
+
+            var process = Process.Start(new ProcessStartInfo("cmd.exe", $"/d /c \"{test}\"") { RedirectStandardOutput = true, UseShellExecute = false })!;
+            var output = process.StandardOutput.ReadToEnd().Split("\r\n");
+            process.WaitForExit();
+
+            Assert.Equal(@"[D:\one;C:\base][x][7][1][]", output[0]);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    // Sources init.sh of the build output in bash and zsh, where they are installed. A fake devtools writes env.sh
+    // on `shell env` and changes the state on any other command, so dt has to reload.
+    [Theory]
+    [InlineData("bash")]
+    [InlineData("zsh")]
+    public void InitSh_LoadsEnvShAndDefinesDt(string shell)
+    {
+        if (OperatingSystem.IsWindows() || !new[] { "/bin", "/usr/bin" }.Any(i => File.Exists(Path.Combine(i, shell))))
+            return;
+
+        var directory = Directory.CreateTempSubdirectory("devtools-init-").FullName;
+        try
+        {
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "init.sh"), Path.Combine(directory, "init.sh"));
+            Directory.CreateDirectory(Path.Combine(directory, "cache"));
+            File.WriteAllText(Path.Combine(directory, "env1.sh"),
+                ShellScripts.Script(Shell.Bash, new[] { "/one" }, new KeyValuePair<string, string>[] { new("DT_X", "1") }, "1"));
+            File.WriteAllText(Path.Combine(directory, "env2.sh"),
+                ShellScripts.Script(Shell.Bash, new[] { "/two" }, new KeyValuePair<string, string>[] { new("DT_X", "2") }, "2"));
+            File.WriteAllText(Path.Combine(directory, "cache", "state"), "1\n");
+
+            var devtools = Path.Combine(directory, "devtools");
+            File.WriteAllText(devtools, """
+                #!/bin/sh
+                dir=$(dirname "$0")
+                if [ "$1" = shell ]; then cp "$dir/env$(cat "$dir/cache/state").sh" "$dir/cache/env.sh"; else echo 2 > "$dir/cache/state"; fi
+                """.ReplaceLineEndings("\n") + "\n");
+            File.SetUnixFileMode(devtools, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            var script = $"""
+                PATH=/usr/bin:/bin
+                . '{directory}/init.sh'
+                echo "[$PATH][$DT_X][$DT_STATE]"
+                dt sl x 2
+                echo "[$PATH][$DT_X][$DT_STATE]"
+                """.ReplaceLineEndings("\n");
+            var info = new ProcessStartInfo(shell) { RedirectStandardOutput = true, UseShellExecute = false };
+            info.ArgumentList.Add("-c");
+            info.ArgumentList.Add(script);
+            info.Environment.Remove("DT_BASEPATH");
+            info.Environment.Remove("DT_ENVS");
+            info.Environment.Remove("DT_STATE");
+            var process = Process.Start(info)!;
+            var output = process.StandardOutput.ReadToEnd().Split("\n");
+            process.WaitForExit();
+
+            Assert.Equal("[/one:/usr/bin:/bin][1][1]", output[0]);
+            Assert.Equal("[/two:/usr/bin:/bin][2][2]", output[1]);
         }
         finally
         {

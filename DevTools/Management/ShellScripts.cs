@@ -8,8 +8,8 @@ using DevTools.Infrastructure;
 namespace DevTools.Management;
 
 // Every shell works the same way: after every change devtools writes cache/env.cmd or cache/env.sh, which sets PATH
-// and variables, and the shell runs it without starting devtools. `shell env` writes it again when it is missing
-// and prints the same commands for hooks of earlier versions. The logic stays here, so the shells only differ in syntax.
+// and variables, and init.cmd or init.sh, which new consoles run, loads it without starting devtools. `shell env` writes
+// it again when it is missing and prints the same commands for hooks of earlier versions.
 public static partial class ShellScripts
 {
     public const string BasePathVariable = "DT_BASEPATH";
@@ -129,50 +129,27 @@ public static partial class ShellScripts
         return Path.Combine(Path.GetDirectoryName(executable) ?? "", PathUtils.CacheDirectoryName, ScriptFileName(shell));
     }
 
-    // cmd: the AutoRun command, it runs env.cmd and lets devtools write it first when it is missing.
-    // bash and zsh: sourced by `eval "$(devtools shell hook bash)"`, a function is needed because a child process cannot change the shell.
-    // A script older than the state, such as after devtools was stopped right after a save, is written again too.
-    public static string Hook(Shell shell, string executable)
+    // init.cmd or init.sh next to devtools, what a new console runs. They load cache/env.cmd or cache/env.sh, let devtools
+    // write it first when it is missing or older than the state, and init.sh defines `dt`.
+    public static string InitFile(Shell shell, string executable)
     {
-        var script = ScriptFile(shell, executable);
-
-        if (shell == Shell.Cmd)
-            return $"""if not defined {InitializedVariable} (set "{InitializedVariable}=1" & (if not exist "{script}" "{executable}" shell env cmd >nul) & call "{script}")""";
-
-        var exe = Quote(executable);
-        var name = Name(shell);
-        var stateFile = Quote(StateFile(executable));
-        var scriptFile = Quote(script);
-
-        return $$"""
-            _dt_reload() {
-              local state=
-              [ -r {{stateFile}} ] && IFS= read -r state < {{stateFile}}
-              [ -r {{scriptFile}} ] && . {{scriptFile}}
-              [ -r {{scriptFile}} ] && [ "$state" = "${{{StateVariable}}-}" ] && return
-              {{exe}} shell env {{name}} >/dev/null && . {{scriptFile}}
-            }
-
-            dt() {
-              {{exe}} "$@"
-              local result=$? state=
-              [ -r {{stateFile}} ] && IFS= read -r state < {{stateFile}}
-              [ "$state" = "${{{StateVariable}}-}" ] || _dt_reload
-              return $result
-            }
-
-            _dt_reload
-            """.ReplaceLineEndings("\n");
+        return Path.Combine(Path.GetDirectoryName(executable) ?? "", shell == Shell.Cmd ? "init.cmd" : "init.sh");
     }
 
-    public static string StateFile(string executable)
+    // cmd: the AutoRun command. Consoles started by one that loaded devtools, such as `cmd /c` of scripts, skip it.
+    // bash and zsh: the line of ~/.bashrc or ~/.zshrc. `shell hook` prints it too, for the `eval` lines of earlier versions.
+    public static string Hook(Shell shell, string executable)
     {
-        return Path.Combine(Path.GetDirectoryName(executable) ?? "", PathUtils.CacheDirectoryName, PathUtils.StateFileName);
+        var file = InitFile(shell, executable);
+
+        return shell == Shell.Cmd
+            ? $"if not defined {InitializedVariable} call \"{file}\""
+            : $". {Quote(file)}";
     }
 
     public static string RcLine(Shell shell, string executable)
     {
-        return $"eval \"$({Quote(executable)} shell hook {Name(shell)})\"";
+        return Hook(shell, executable);
     }
 
     public static string RcFile(Shell shell, Func<string, string> getEnv)
@@ -209,11 +186,11 @@ public static partial class ShellScripts
     }
 
     // Removes the lines added by `shell install`, including ones that point to another devtools location
-    // and the `init` lines of earlier versions.
+    // and the `eval` lines and `# devtools` comments of earlier versions.
     public static string RemoveFromRc(string content, Shell shell)
     {
         var lineEnding = content.Contains("\r\n") ? "\r\n" : "\n";
-        var rcLine = new Regex($"""^\s*eval "\$\(.*devtools.*(hook|init) {Name(shell)}\)"\s*$""");
+        var rcLine = new Regex($"""^\s*(eval "\$\(.*devtools.*(hook|init) {Name(shell)}\)"|\. '[^']*devtools[^']*[/\\]init\.sh')\s*$""");
         var kept = new List<string>();
 
         foreach (var line in content.Split(lineEnding))
@@ -233,6 +210,13 @@ public static partial class ShellScripts
     }
 
     public const string RcMarker = "# devtools";
+
+    public static string AppendToRc(string content, string line)
+    {
+        var lineEnding = content.Contains("\r\n") ? "\r\n" : "\n";
+        var separator = content.Length == 0 || content.EndsWith('\n') ? "" : lineEnding;
+        return content + separator + line + lineEnding;
+    }
 
     private static string Name(Shell shell)
     {
