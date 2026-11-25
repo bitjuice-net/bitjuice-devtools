@@ -27,6 +27,12 @@ public sealed class SourceManagerTests : IDisposable
             Paths.Add(path);
             return client.GetFileAsync(repository, path);
         }
+
+        public Task<List<string>> ListFilesAsync(string repository, string directory)
+        {
+            Paths.Add(directory + "/");
+            return client.ListFilesAsync(repository, directory);
+        }
     }
 
     private readonly string temp = Directory.CreateTempSubdirectory("devtools-sources-").FullName;
@@ -63,11 +69,10 @@ public sealed class SourceManagerTests : IDisposable
         Index(repository);
     }
 
-    // index.json as the repository has it: the names of its manifests.
+    // index.json as the repository has it: its name and maintainer.
     private static void Index(string repository)
     {
-        var apps = Directory.CreateDirectory(Path.Combine(repository, "apps")).GetFiles("*.app").Select(i => Path.GetFileNameWithoutExtension(i.Name)).ToList();
-        File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), System.Text.Json.JsonSerializer.Serialize(new { apps }));
+        File.WriteAllText(Path.Combine(repository, RepositoryIndex.FileName), $$"""{ "name": "{{Path.GetFileName(repository)}} apps", "maintainer": "someone" }""");
     }
 
     private static string RepositoryFile(string repository, string name)
@@ -205,7 +210,7 @@ public sealed class SourceManagerTests : IDisposable
     }
 
     [Fact]
-    public void Refresh_ReadsTheIndexOncePerCommand()
+    public void Refresh_ReadsTheManifestOncePerCommandAndNotTheIndex()
     {
         Manifest(repo, "age");
         var sources = Next();
@@ -213,7 +218,7 @@ public sealed class SourceManagerTests : IDisposable
         TestTools.CaptureConsole(() => sources.Refresh("age"));
         TestTools.CaptureConsole(() => sources.Refresh("age"));
 
-        Assert.Single(client.Paths, RepositoryIndex.FileName);
+        Assert.Equal(new[] { SourceManager.ManifestPath("age") }, client.Paths);
     }
 
     [Fact]
@@ -337,18 +342,28 @@ public sealed class SourceManagerTests : IDisposable
     }
 
     [Fact]
-    public void List_ShowsCountsAndTheApplicationsOfOneRepository()
+    public void List_ShowsNamesAndTheApplicationsOfOneRepository()
     {
         Manifest(repo, "age");
         Manifest(repo, "java");
+        File.WriteAllText(Path.Combine(repo, "apps", "notes.txt"), "not a manifest");
         Refresh("age");
 
         var all = TestTools.CaptureConsole(() => Next().List(null));
         var one = TestTools.CaptureConsole(() => Next().List(repo));
 
-        Assert.Matches(@"(?m)^.*repo\s+2\s*$", all);
+        Assert.Matches(@"(?m)^.*repo\s+repo apps\s+someone\s*$", all);
         Assert.Matches(@"(?m)^age\s+fetched\s*$", one);
         Assert.Matches(@"(?m)^java\s*$", one);
+        Assert.DoesNotContain("notes", one);
+    }
+
+    [Fact]
+    public void Add_ShowsTheNameAndMaintainer()
+    {
+        Index(other);
+
+        Assert.Contains("other apps, maintained by someone", TestTools.CaptureConsole(() => Next().Add(other)));
     }
 
 }

@@ -893,7 +893,7 @@ public sealed class ToolInstallerTests : IDisposable
                 { "name": "tool", "paths": ["%APPDIR%"],
                   "install": { "versions": { "type": "github-releases", "repo": "a/b" }, "steps": [ { "type": "download", "asset": "tool.zip" }, { "type": "extract" } ] } }
                 """);
-            File.WriteAllText(Path.Combine(repo, "index.json"), """{ "apps": ["tool"] }""");
+            File.WriteAllText(Path.Combine(repo, "index.json"), """{ "name": "test apps", "maintainer": "someone" }""");
             storage.Save("config/sources.json", new SourcesState { Repositories = new List<string> { repo } });
             var options = Options.Create(new Settings { RootPath = root });
             var sources = new SourceManager(options, storage, definitions, new RepositoryClient(new System.Net.Http.HttpClient()));

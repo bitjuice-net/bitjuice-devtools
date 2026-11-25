@@ -128,16 +128,21 @@ enough for public repositories.
 [bitjuice-net/bitjuice-devtools-apps](https://github.com/bitjuice-net/bitjuice-devtools-apps) by default.
 
 ```
-dt source list                       repositories and how many applications they have
+dt source list                       repositories with their names and maintainers
 dt source list owner/repo            the applications of a repository and which of them you have
 dt source add owner/repo             add a repository on GitHub, or a full local path while writing manifests
 ```
 
-A repository has `apps/<application>.app` for every application, and `index.json` in its root with their names:
+A repository has `apps/<application>.app` for every application, and `index.json` in its root with a friendly name
+and the maintainer:
 
 ```json
-{ "apps": ["age", "java"] }
+{ "name": "bitjuice devtools apps", "maintainer": "bitjuice-net" }
 ```
+
+The applications are the files in `apps`, there is no list to keep up to date. devtools fetches `apps/<application>.app`
+to know whether a repository has an application. Only `dt source list owner/repo` lists the directory, through the GitHub
+API, which allows 60 requests an hour without a token.
 
 Nothing of a repository is cached. `dt app install` and `dt app update` read it every time and bring the manifest of
 the application up to date:

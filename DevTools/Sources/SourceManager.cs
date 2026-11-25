@@ -15,8 +15,9 @@ using Microsoft.Extensions.Options;
 
 namespace DevTools.Sources;
 
-// Manifest repositories: apps/<application>.app for every application and index.json with their names.
-// Nothing of them is cached, every command that needs a repository reads it again.
+// Manifest repositories: apps/<application>.app for every application and index.json with the name and maintainer.
+// Nothing of them is cached, every command that needs a repository reads it again. Whether a repository has an application
+// is known by fetching its .app, only `source list <repository>` lists the files.
 // A fetched .app records its repository and hash in origin, so the tools directory alone knows where it came from
 // and whether it was changed by hand.
 public partial class SourceManager(IOptions<Settings> options, IStorage storage, IToolDefinitionProvider definitions, IRepositoryClient client)
@@ -34,6 +35,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
 
     // Read once per command.
     private readonly Dictionary<string, RepositoryIndex> indexes = new(Comparer);
+    private readonly Dictionary<string, byte[]> manifests = new(Comparer);
 
     public void Add(string repository)
     {
@@ -49,7 +51,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         State.Repositories.Add(repository);
         Save();
 
-        Console.WriteLine($"Added {repository} with {index.Apps.Count} application(s)");
+        Console.WriteLine($"Added {repository}: {Describe(index)}");
     }
 
     public void Remove(string repository)
@@ -77,15 +79,24 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             return;
         }
 
-        var table = new TextTable("REPOSITORY", "APPLICATIONS");
+        var table = new TextTable("REPOSITORY", "NAME", "MAINTAINER");
 
         foreach (var source in State.Repositories)
         {
             var index = TryGetIndex(source, out var error);
-            table.AddRow(source, index != null ? index.Apps.Count.ToString() : $"unavailable: {error}");
+            if (index != null)
+                table.AddRow(source, index.Name ?? "-", index.Maintainer ?? "-");
+            else
+                table.AddRow(source, $"unavailable: {error}", "");
         }
 
         table.Write();
+    }
+
+    private static string Describe(RepositoryIndex index)
+    {
+        var name = index.Name ?? "no name in index.json";
+        return index.Maintainer != null ? $"{name}, maintained by {index.Maintainer}" : name;
     }
 
     private void ListApplications(string source)
@@ -93,7 +104,15 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         var table = new TextTable("APPLICATION", "LOCAL");
         var root = PathUtils.GetRootedPath(settings.RootPath);
 
-        foreach (var name in GetIndex(source).Apps.Order(StringComparer.Ordinal))
+        var files = Wait(client.ListFilesAsync(source, ManifestDirectory))
+            ?? throw new InvalidOperationException($"{source} has no {ManifestDirectory} directory, is it a manifest repository?");
+
+        var names = files
+            .Where(i => i.EndsWith(ToolManifest.FileName, StringComparison.Ordinal) && i.Length > ToolManifest.FileName.Length)
+            .Select(i => i[..^ToolManifest.FileName.Length])
+            .Order(StringComparer.Ordinal);
+
+        foreach (var name in names)
             table.AddRow(name, DescribeLocal(root, name, source));
 
         table.Write();
@@ -196,7 +215,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         if (source != null)
         {
             var chosen = FindSource(source);
-            if (!GetIndex(chosen).Apps.Contains(application))
+            if (!Has(chosen, application))
                 throw new InvalidOperationException($"{chosen} has no {application}, `source list {chosen}` lists its applications");
 
             return chosen;
@@ -208,17 +227,21 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
             if (repository == null)
                 return null;
 
-            return GetIndex(repository).Apps.Contains(application) ? repository : null;
+            return Has(repository, application) ? repository : null;
         }
 
         var found = new List<string>();
         foreach (var repository in State.Repositories)
         {
-            var index = TryGetIndex(repository, out var error);
-            if (index == null)
-                Console.Error.WriteLine($"Skipped {repository}: {error}");
-            else if (index.Apps.Contains(application))
-                found.Add(repository);
+            try
+            {
+                if (Has(repository, application))
+                    found.Add(repository);
+            }
+            catch (Exception e) when (IsUnavailable(e))
+            {
+                Console.Error.WriteLine($"Skipped {repository}: {e.Message}");
+            }
         }
 
         if (found.Count > 1)
@@ -233,8 +256,8 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
     {
         var path = ManifestPath(application);
         var location = $"{repository}/{path}";
-        var content = Download(repository, path)
-            ?? throw new InvalidOperationException($"{repository} lists {application} in {RepositoryIndex.FileName} but has no `{path}`");
+        var content = GetManifest(repository, application)
+            ?? throw new InvalidOperationException($"{repository} has no `{path}`");
 
         var manifest = JsonStorage.Parse<ToolManifest>(content);
         Validate(manifest, application, location);
@@ -271,15 +294,37 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         return true;
     }
 
+    private const string ManifestDirectory = "apps";
+
     // A repository keeps the manifests in apps/<application>.app, next to index.json.
     public static string ManifestPath(string application)
     {
-        return $"apps/{application}{ToolManifest.FileName}";
+        return $"{ManifestDirectory}/{application}{ToolManifest.FileName}";
+    }
+
+    private bool Has(string repository, string application)
+    {
+        return GetManifest(repository, application) != null;
+    }
+
+    // The .app of the application in the repository, null when it has none. Read once per command.
+    private byte[] GetManifest(string repository, string application)
+    {
+        var key = $"{repository}|{application}";
+        if (!manifests.TryGetValue(key, out var content))
+            manifests[key] = content = Download(repository, ManifestPath(application));
+
+        return content;
     }
 
     private byte[] Download(string repository, string path)
     {
-        return client.GetFileAsync(repository, path).GetAwaiter().GetResult();
+        return Wait(client.GetFileAsync(repository, path));
+    }
+
+    private static T Wait<T>(System.Threading.Tasks.Task<T> task)
+    {
+        return task.GetAwaiter().GetResult();
     }
 
     private string FindSource(string repository)
@@ -311,9 +356,7 @@ public partial class SourceManager(IOptions<Settings> options, IStorage storage,
         var content = Download(repository, RepositoryIndex.FileName)
             ?? throw new InvalidOperationException($"{repository} has no {RepositoryIndex.FileName}, is it a manifest repository?");
 
-        index = JsonStorage.Parse<RepositoryIndex>(content);
-        index.Apps ??= new List<string>();
-        return indexes[repository] = index;
+        return indexes[repository] = JsonStorage.Parse<RepositoryIndex>(content);
     }
 
     private static bool IsUnavailable(Exception e)
